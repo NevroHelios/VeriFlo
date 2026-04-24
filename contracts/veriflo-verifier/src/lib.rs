@@ -7,6 +7,7 @@ use soroban_sdk::{
 mod token_interface {
     use soroban_sdk::{contractclient, Address, Env};
 
+    #[allow(dead_code)]
     #[contractclient(name = "VflyTokenClient")]
     pub trait VflyTokenInterface {
         fn set_authorized(env: Env, id: Address, authorize: bool);

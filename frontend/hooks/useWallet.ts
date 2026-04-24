@@ -34,7 +34,6 @@ export function useWallet(): WalletState {
         await freighter.setAllowed();
       }
 
-      // v5: getAddress() replaces getPublicKey()
       const addrResult = await freighter.getAddress();
       if (!addrResult.address) {
         throw new Error("Could not get address from Freighter");

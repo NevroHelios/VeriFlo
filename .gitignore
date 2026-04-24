@@ -1,0 +1,21 @@
+# Rust
+target/
+Cargo.lock
+
+# Node
+node_modules/
+.next/
+dist/
+*.tsbuildinfo
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel

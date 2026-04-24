@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "contracts/vfly-token",
+    "contracts/veriflo-verifier",
+]
+resolver = "2"

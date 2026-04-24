@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   TransactionBuilder,
-  SorobanRpc,
+  rpc,
   xdr,
   Address,
   scValToNative,
@@ -26,17 +26,15 @@ export function useBalance(publicKey: string | null): BalanceState {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetch = useCallback(async () => {
+  const fetchBalances = useCallback(async () => {
     if (!publicKey) return;
     setLoading(true);
     setError(null);
     try {
-      // XLM balance via Horizon
       const account = await horizonServer.loadAccount(publicKey);
       const nativeBal = account.balances.find((b) => b.asset_type === "native");
       setXlm(nativeBal ? nativeBal.balance : "0");
 
-      // VFLY balance via Soroban simulate
       if (!TOKEN_CONTRACT) {
         setVfly("0");
       } else {
@@ -71,13 +69,12 @@ export function useBalance(publicKey: string | null): BalanceState {
           .build();
 
         const sim = await rpcServer.simulateTransaction(tx);
-        if (SorobanRpc.Api.isSimulationError(sim)) {
+        if (rpc.Api.isSimulationError(sim)) {
           setVfly("0");
         } else {
-          const result = (sim as SorobanRpc.Api.SimulateTransactionSuccessResponse)
-            .result;
-          if (result) {
-            const raw = scValToNative(result.retval) as bigint;
+          const simSuccess = sim as rpc.Api.SimulateTransactionSuccessResponse;
+          if (simSuccess.result) {
+            const raw = scValToNative(simSuccess.result.retval) as bigint;
             setVfly((Number(raw) / 1e7).toFixed(7));
           } else {
             setVfly("0");
@@ -92,8 +89,8 @@ export function useBalance(publicKey: string | null): BalanceState {
   }, [publicKey]);
 
   useEffect(() => {
-    fetch();
-  }, [fetch]);
+    fetchBalances();
+  }, [fetchBalances]);
 
-  return { xlm, vfly, loading, error, refetch: fetch };
+  return { xlm, vfly, loading, error, refetch: fetchBalances };
 }

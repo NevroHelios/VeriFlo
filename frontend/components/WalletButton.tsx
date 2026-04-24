@@ -1,11 +1,24 @@
 "use client";
 
-import { useWallet } from "@/hooks/useWallet";
+import { VerifloError } from "@/lib/errors";
 
-export default function WalletButton() {
-  const { publicKey, connected, connecting, error, connect, disconnect } =
-    useWallet();
+interface Props {
+  publicKey: string | null;
+  connected: boolean;
+  connecting: boolean;
+  error: VerifloError | null;
+  connect: () => void;
+  disconnect: () => void;
+}
 
+export default function WalletButton({
+  publicKey,
+  connected,
+  connecting,
+  error,
+  connect,
+  disconnect,
+}: Props) {
   const truncated = publicKey
     ? `${publicKey.slice(0, 6)}…${publicKey.slice(-4)}`
     : null;

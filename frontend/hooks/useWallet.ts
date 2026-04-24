@@ -34,12 +34,13 @@ export function useWallet(): WalletState {
         await freighter.setAllowed();
       }
 
-      const pkResult = await freighter.getPublicKey();
-      if (!pkResult.publicKey) {
-        throw new Error("Could not get public key from Freighter");
+      // v5: getAddress() replaces getPublicKey()
+      const addrResult = await freighter.getAddress();
+      if (!addrResult.address) {
+        throw new Error("Could not get address from Freighter");
       }
 
-      setPublicKey(pkResult.publicKey);
+      setPublicKey(addrResult.address);
       setConnected(true);
     } catch (err) {
       setError(parseError(err));

@@ -7,12 +7,18 @@ const TYPE_LABELS: Record<VerifloError["type"], string> = {
   WALLET_REJECTED: "Wallet Rejected",
   INSUFFICIENT_XLM: "Insufficient XLM",
   PROOF_REJECTED: "Proof Rejected",
+  UNTRUSTED_ROOT: "Untrusted Credential",
+  ALREADY_AUTHORIZED: "Already Authorized",
+  CONTRACT_ERROR: "Contract Error",
 };
 
 const TYPE_COLORS: Record<VerifloError["type"], string> = {
   WALLET_REJECTED: "border-yellow-500 bg-yellow-950 text-yellow-200",
   INSUFFICIENT_XLM: "border-orange-500 bg-orange-950 text-orange-200",
   PROOF_REJECTED: "border-red-500 bg-red-950 text-red-200",
+  UNTRUSTED_ROOT: "border-red-500 bg-red-950 text-red-200",
+  ALREADY_AUTHORIZED: "border-blue-500 bg-blue-950 text-blue-200",
+  CONTRACT_ERROR: "border-red-500 bg-red-950 text-red-200",
 };
 
 interface Props {

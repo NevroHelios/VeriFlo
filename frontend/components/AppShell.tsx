@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useWallet } from "@/hooks/useWallet";
 import { useBalance } from "@/hooks/useBalance";
 import WalletButton from "@/components/WalletButton";
@@ -7,14 +8,17 @@ import BalanceDisplay from "@/components/BalanceDisplay";
 import IssuerPanel from "@/components/IssuerPanel";
 import UserClaimPanel from "@/components/UserClaimPanel";
 
+type Tab = "user" | "issuer";
+
 export default function AppShell() {
+  const [tab, setTab] = useState<Tab>("user");
   const wallet = useWallet();
   const balance = useBalance(wallet.publicKey);
 
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-slate-800 sticky top-0 bg-slate-900/90 backdrop-blur z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
           <div className="flex-1">
             <h1 className="text-xl font-bold tracking-tight">
               <span className="text-indigo-400">Veri</span>Flo
@@ -35,50 +39,62 @@ export default function AppShell() {
         </div>
       </header>
 
-      <main className="flex-1 max-w-5xl mx-auto px-4 py-8 w-full">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-            <IssuerPanel />
-          </div>
-          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+      <main className="flex-1 max-w-2xl mx-auto px-4 py-8 w-full">
+        {/* Tab selector */}
+        <div className="flex rounded-lg bg-slate-800 border border-slate-700 p-1 mb-6">
+          <button
+            onClick={() => setTab("user")}
+            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+              tab === "user"
+                ? "bg-indigo-600 text-white"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            User — Claim VFLY
+          </button>
+          <button
+            onClick={() => setTab("issuer")}
+            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+              tab === "issuer"
+                ? "bg-indigo-600 text-white"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            Issuer — Fund &amp; Issue
+          </button>
+        </div>
+
+        {/* Panel */}
+        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+          {tab === "user" ? (
             <UserClaimPanel
               publicKey={wallet.publicKey}
               onSuccess={balance.refetch}
             />
-          </div>
+          ) : (
+            <IssuerPanel />
+          )}
         </div>
 
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-slate-400">
-          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
-            <p className="font-semibold text-slate-300 mb-1">VFLY Token</p>
-            <p className="font-mono text-xs break-all">
+        {/* Contract addresses */}
+        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-400">
+          <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+            <p className="font-semibold text-slate-300 mb-1 text-xs">VFLY Token</p>
+            <p className="font-mono text-xs break-all opacity-70">
               {process.env.NEXT_PUBLIC_TOKEN_CONTRACT || "not set"}
             </p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
-            <p className="font-semibold text-slate-300 mb-1">Verifier Contract</p>
-            <p className="font-mono text-xs break-all">
+          <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+            <p className="font-semibold text-slate-300 mb-1 text-xs">Verifier</p>
+            <p className="font-mono text-xs break-all opacity-70">
               {process.env.NEXT_PUBLIC_VERIFIER_CONTRACT || "not set"}
             </p>
-          </div>
-          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
-            <p className="font-semibold text-slate-300 mb-1">Network</p>
-            <p className="text-xs">Stellar Testnet (Soroban Protocol 22+)</p>
           </div>
         </div>
       </main>
 
       <footer className="border-t border-slate-800 py-4 text-center text-xs text-slate-500">
-        <a
-          href="https://forms.gle/placeholder"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:text-slate-300 transition-colors"
-        >
-          User Onboarding Form
-        </a>
-        {" · "}
-        <span>VeriFlo · Stellar Testnet Demo</span>
+        VeriFlo · Stellar Testnet · ZK-powered KYC
       </footer>
     </div>
   );

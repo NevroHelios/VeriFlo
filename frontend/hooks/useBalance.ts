@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   TransactionBuilder,
+  Contract,
   rpc,
-  xdr,
   Address,
   scValToNative,
-  nativeToScVal,
+  xdr,
 } from "@stellar/stellar-sdk";
 import { horizonServer, rpcServer } from "@/lib/stellar";
 import { NETWORK_PASSPHRASE, TOKEN_CONTRACT } from "@/constants";
@@ -39,32 +39,16 @@ export function useBalance(publicKey: string | null): BalanceState {
         setVfly("0");
       } else {
         const sorobanAccount = await rpcServer.getAccount(publicKey);
-        const addressScVal = nativeToScVal(Address.fromString(publicKey), {
-          type: "address",
-        });
+        const addressScVal = xdr.ScVal.scvAddress(
+          Address.fromString(publicKey).toScAddress()
+        );
 
+        const contract = new Contract(TOKEN_CONTRACT);
         const tx = new TransactionBuilder(sorobanAccount, {
           fee: "100",
           networkPassphrase: NETWORK_PASSPHRASE,
         })
-          .addOperation(
-            xdr.Operation.fromXDR(
-              xdr.OperationBody.invokeHostFunction(
-                new xdr.InvokeHostFunctionOp({
-                  hostFunction: xdr.HostFunction.hostFunctionTypeInvokeContract(
-                    new xdr.InvokeContractArgs({
-                      contractAddress: Address.fromString(
-                        TOKEN_CONTRACT
-                      ).toScAddress(),
-                      functionName: "balance",
-                      args: [addressScVal],
-                    })
-                  ),
-                  auth: [],
-                })
-              ).toXDR()
-            )
-          )
+          .addOperation(contract.call("balance", addressScVal))
           .setTimeout(30)
           .build();
 

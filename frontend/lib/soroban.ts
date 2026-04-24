@@ -1,10 +1,10 @@
 import {
   TransactionBuilder,
+  Contract,
   rpc,
   xdr,
   Address,
   scValToNative,
-  nativeToScVal,
 } from "@stellar/stellar-sdk";
 import { signTransaction } from "@stellar/freighter-api";
 import { rpcServer } from "@/lib/stellar";
@@ -17,34 +17,22 @@ export async function invokeContract(
   args: xdr.ScVal[]
 ): Promise<{ hash: string; result: unknown }> {
   const account = await rpcServer.getAccount(publicKey);
+  const contract = new Contract(contractId);
 
   const tx = new TransactionBuilder(account, {
     fee: "1000000",
     networkPassphrase: NETWORK_PASSPHRASE,
   })
-    .addOperation(
-      xdr.Operation.fromXDR(
-        xdr.OperationBody.invokeHostFunction(
-          new xdr.InvokeHostFunctionOp({
-            hostFunction: xdr.HostFunction.hostFunctionTypeInvokeContract(
-              new xdr.InvokeContractArgs({
-                contractAddress: Address.fromString(contractId).toScAddress(),
-                functionName: method,
-                args,
-              })
-            ),
-            auth: [],
-          })
-        ).toXDR()
-      )
-    )
+    .addOperation(contract.call(method, ...args))
     .setTimeout(30)
     .build();
 
   const simResult = await rpcServer.simulateTransaction(tx);
 
   if (rpc.Api.isSimulationError(simResult)) {
-    throw new Error(`Simulation failed: ${(simResult as rpc.Api.SimulateTransactionErrorResponse).error}`);
+    throw new Error(
+      `Simulation failed: ${(simResult as rpc.Api.SimulateTransactionErrorResponse).error}`
+    );
   }
 
   const assembled = rpc.assembleTransaction(tx, simResult).build();
@@ -76,12 +64,13 @@ export async function invokeContract(
       if (poll.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
         throw new Error(`Transaction failed: ${poll.status}`);
       }
-      const retval = (poll as rpc.Api.GetSuccessfulTransactionResponse).returnValue;
+      const retval = (poll as rpc.Api.GetSuccessfulTransactionResponse)
+        .returnValue;
       return { hash, result: retval ? scValToNative(retval) : null };
     }
     attempts++;
   }
-  throw new Error("Transaction polling timed out after 30 seconds");
+  throw new Error("Transaction polling timed out");
 }
 
 export async function submitProof(
@@ -89,9 +78,9 @@ export async function submitProof(
   proofBytes: Uint8Array
 ): Promise<string> {
   const proofScVal = xdr.ScVal.scvBytes(Buffer.from(proofBytes));
-  const userScVal = nativeToScVal(Address.fromString(publicKey), {
-    type: "address",
-  });
+  const userScVal = xdr.ScVal.scvAddress(
+    Address.fromString(publicKey).toScAddress()
+  );
 
   const { hash } = await invokeContract(
     publicKey,

@@ -5,7 +5,6 @@ import {
   Operation,
   Asset,
   Memo,
-  Networks,
 } from "@stellar/stellar-sdk";
 import { Horizon } from "@stellar/stellar-sdk";
 import { HORIZON_URL, XLM_FUND_AMOUNT, NETWORK_PASSPHRASE } from "@/constants";

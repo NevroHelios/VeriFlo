@@ -2,6 +2,8 @@
 members = [
     "contracts/vfly-token",
     "contracts/veriflo-verifier",
+    "contracts/kyc-verifier",
+    "contracts/credential-registry",
 ]
 resolver = "2"
 

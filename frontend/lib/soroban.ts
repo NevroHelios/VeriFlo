@@ -75,9 +75,17 @@ export async function invokeContract(
 
 export async function submitProof(
   publicKey: string,
-  proofBytes: Uint8Array
+  proofBytes: Uint8Array,
+  publicInputs: Uint8Array[]
 ): Promise<string> {
   const proofScVal = xdr.ScVal.scvBytes(Buffer.from(proofBytes));
+
+  const pubInputsScVal = xdr.ScVal.scvVec(
+    publicInputs.map((inp) =>
+      xdr.ScVal.scvBytes(Buffer.from(inp))
+    )
+  );
+
   const userScVal = xdr.ScVal.scvAddress(
     Address.fromString(publicKey).toScAddress()
   );
@@ -86,7 +94,7 @@ export async function submitProof(
     publicKey,
     VERIFIER_CONTRACT,
     "verify_and_authorize",
-    [proofScVal, userScVal]
+    [proofScVal, pubInputsScVal, userScVal]
   );
   return hash;
 }

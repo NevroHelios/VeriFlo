@@ -16,6 +16,8 @@ protection plus VFLY authorization.
   generate a browser-local demo credential.
 - **Audit:** inspect root registration, reserve staging, proof verification,
   nullifier use, and release events without exposing identity fields.
+- **Execution modes:** Demo mode is the judge-safe browser flow. Testnet mode
+  uses deployed Soroban contracts and refuses demo proof bytes.
 
 ## Current Architecture
 
@@ -34,6 +36,24 @@ The current MVP uses a Soroban token controlled by the verifier contract. The
 classic Stellar `AUTH_REQUIRED` plus claimable balance rail remains the next
 production integration step.
 
+## Hackathon Demo
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`, leave the mode switch on **Demo**, then run:
+
+1. **Demo wallet**
+2. **Issuer** -> **Generate demo credential** -> **Save to wallet**
+3. **Investor** -> **Verify and receive VFLY**
+4. **Audit** -> show the compliance event stream
+
+Expected result: the wallet shows `1000.0000000` VFLY, the audit stream records
+the proof release, and a second claim is rejected.
+
 ## Local Setup
 
 ```bash
@@ -46,6 +66,10 @@ Open `http://localhost:3000`.
 
 `npm run dev` copies the circuit WASM and zkey into `frontend/public/circuits`
 before starting Next.js.
+
+The app defaults to Demo mode even when testnet contract IDs are present. Use
+the **Testnet** mode switch when you want to submit real circuit proofs to the
+deployed verifier.
 
 ## Testnet Environment
 

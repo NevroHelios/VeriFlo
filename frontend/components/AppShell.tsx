@@ -2,11 +2,18 @@
 
 import { useState } from "react";
 import { useWallet } from "@/hooks/useWallet";
+import AppErrorBoundary from "@/components/AppErrorBoundary";
 import WalletButton from "@/components/WalletButton";
 import BalanceDisplay from "@/components/BalanceDisplay";
 import IssuerPanel from "@/components/IssuerPanel";
+import ModeSwitch from "@/components/ModeSwitch";
 import UserClaimPanel from "@/components/UserClaimPanel";
-import { getAuditEvents } from "@/lib/demoLedger";
+import { getAuditEvents, resetDemoLedger } from "@/lib/demoLedger";
+import {
+  loadRuntimeMode,
+  saveRuntimeMode,
+  type RuntimeMode,
+} from "@/lib/runtimeMode";
 import {
   KYC_VERIFIER_CONTRACT,
   TOKEN_CONTRACT,
@@ -43,8 +50,11 @@ function ContractCard({
   );
 }
 
-export default function AppShell() {
+function AppContent() {
   const [tab, setTab] = useState<Tab>("claim");
+  const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>(() =>
+    loadRuntimeMode()
+  );
   const [ledgerVersion, setLedgerVersion] = useState(0);
   const wallet = useWallet();
   const auditEvents = getAuditEvents();
@@ -52,6 +62,18 @@ export default function AppShell() {
   function handleClaimSuccess() {
     setLedgerVersion((version) => version + 1);
   }
+
+  function handleRuntimeModeChange(mode: RuntimeMode) {
+    setRuntimeMode(mode);
+    saveRuntimeMode(mode);
+  }
+
+  function handleResetDemo() {
+    resetDemoLedger();
+    setLedgerVersion((version) => version + 1);
+  }
+
+  const demoMode = runtimeMode === "demo";
 
   return (
     <div className="app-frame">
@@ -78,10 +100,11 @@ export default function AppShell() {
           </nav>
 
           <div className="topbar-actions">
+            <ModeSwitch mode={runtimeMode} onChange={handleRuntimeModeChange} />
             {wallet.connected && (
               <BalanceDisplay
                 publicKey={wallet.publicKey}
-                demo={wallet.demo}
+                demo={demoMode || wallet.demo}
                 refreshKey={ledgerVersion}
               />
             )}
@@ -150,10 +173,11 @@ export default function AppShell() {
               <UserClaimPanel
                 publicKey={wallet.publicKey}
                 walletDemo={wallet.demo}
+                runtimeMode={runtimeMode}
                 onSuccess={handleClaimSuccess}
               />
             )}
-            {tab === "issuer" && <IssuerPanel />}
+            {tab === "issuer" && <IssuerPanel runtimeMode={runtimeMode} />}
             {tab === "audit" && (
               <div className="panel-stack">
                 <div className="section-heading">
@@ -163,6 +187,15 @@ export default function AppShell() {
                     Every event is keyed by protocol state: credential root,
                     nullifier, wallet authorization, or release hash.
                   </p>
+                  {demoMode && (
+                    <button
+                      type="button"
+                      className="button button-secondary"
+                      onClick={handleResetDemo}
+                    >
+                      Reset demo state
+                    </button>
+                  )}
                 </div>
 
                 <div className="audit-list">
@@ -194,10 +227,11 @@ export default function AppShell() {
           <aside className="workspace-side" aria-label="Protocol state">
             <div className="side-section">
               <span className="eyebrow">Asset rail</span>
-              <h2>Verifier-admin VFLY</h2>
+              <h2>{demoMode ? "Judge demo rail" : "Verifier-admin VFLY"}</h2>
               <p>
-                The MVP uses a Soroban token with verifier-controlled
-                authorization and minting.
+                {demoMode
+                  ? "Local execution shows the complete eligibility, nullifier, authorization, and release flow."
+                  : "Testnet execution uses deployed Soroban contracts and accepts real Groth16 proofs only."}
               </p>
               <div className="mini-grid">
                 <span>Groth16 KYC</span>
@@ -221,5 +255,13 @@ export default function AppShell() {
         </section>
       </main>
     </div>
+  );
+}
+
+export default function AppShell() {
+  return (
+    <AppErrorBoundary>
+      <AppContent />
+    </AppErrorBoundary>
   );
 }

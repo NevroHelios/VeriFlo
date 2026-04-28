@@ -23,34 +23,26 @@ Ready
 
 Open the local URL shown by Next.js.
 
-## 2. Local MVP Happy Path
+## 2. Judge Demo Happy Path
 
 Use this mode when you want the full product flow without spending testnet XLM.
-
-Before starting the app, temporarily remove or comment these values in
-`frontend/.env.local`:
-
-```bash
-NEXT_PUBLIC_TOKEN_CONTRACT=
-NEXT_PUBLIC_KYC_VERIFIER_CONTRACT=
-NEXT_PUBLIC_VERIFIER_CONTRACT=
-```
-
-Restart `npm run dev`.
+The app defaults to **Demo** mode, even when `.env.local` contains deployed
+contract IDs.
 
 ### User Workflow
 
-1. Click **Demo wallet**.
-2. Open the **Issuer** tab.
-3. Click **Generate demo credential**.
-4. Click **Save to wallet**.
-5. Open the **Investor** tab.
-6. Confirm these checks show as passing:
+1. Confirm the top mode switch is set to **Demo**.
+2. Click **Demo wallet**.
+3. Open the **Issuer** tab.
+4. Click **Generate demo credential**.
+5. Click **Save to wallet**.
+6. Open the **Investor** tab.
+7. Confirm these checks show as passing:
    - Wallet-bound proof: `Ready`
    - Credential root: `Trusted demo root`
    - Accreditation: `Tier 2`
    - Expiry: future date
-7. Click **Verify and receive VFLY**.
+8. Click **Verify and receive VFLY**.
 
 Expected output:
 
@@ -70,7 +62,7 @@ Wallet authorized, nullifier consumed, VFLY released.
 
 ## 3. Replay Protection Test
 
-Stay in local MVP mode after the happy path.
+Stay in Demo mode after the happy path.
 
 1. Open the **Investor** tab again.
 2. Click **Verify and receive VFLY** again with the same credential.
@@ -78,8 +70,8 @@ Stay in local MVP mode after the happy path.
 Expected output:
 
 ```text
-Proof Rejected
-Nullifier already used.
+Already Authorized
+Wallet already authorized.
 ```
 
 The VFLY balance should remain:
@@ -134,6 +126,8 @@ ENABLE_TESTNET_FUNDER=false
 ```
 
 Restart the app.
+
+Switch the top mode control from **Demo** to **Testnet**.
 
 Expected UI:
 
@@ -247,7 +241,7 @@ Expected output:
 
 ```text
 cargo test: all contract tests pass
-npm test: 11 tests pass
+npm test: 13 frontend tests pass
 npm run build: Compiled successfully
 ```
 

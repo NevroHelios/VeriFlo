@@ -8,11 +8,13 @@ import TransactionStatus from "@/components/TransactionStatus";
 import CredentialPanel from "@/components/CredentialPanel";
 import type { Credential } from "@/lib/credential";
 import { loadCredential } from "@/lib/credential";
+import type { RuntimeMode } from "@/lib/runtimeMode";
 import { VERIFIER_CONTRACT } from "@/constants";
 
 interface Props {
   publicKey: string | null;
   walletDemo?: boolean;
+  runtimeMode: RuntimeMode;
   onSuccess?: () => void;
 }
 
@@ -29,6 +31,7 @@ function formatDate(timestamp: number) {
 export default function UserClaimPanel({
   publicKey,
   walletDemo = false,
+  runtimeMode,
   onSuccess,
 }: Props) {
   const [credential, setCredential] = useState<Credential | null>(() => {
@@ -48,10 +51,16 @@ export default function UserClaimPanel({
       const { proofBytes, publicInputs, mode } = await generateProof(
         credential,
         publicKey,
-        { allowDemoProof: !VERIFIER_CONTRACT }
+        { allowDemoProof: runtimeMode === "demo" }
       );
       setStatus("pending");
-      const txHash = await submitProof(publicKey, proofBytes, publicInputs, mode);
+      const txHash = await submitProof(
+        publicKey,
+        proofBytes,
+        publicInputs,
+        mode,
+        runtimeMode
+      );
       setHash(txHash);
       setStatus("success");
       onSuccess?.();
@@ -68,9 +77,11 @@ export default function UserClaimPanel({
     ? credential.accreditation >= MIN_ACCREDITATION
     : false;
   const eligible = !!credential && !isExpired && hasTier;
+  const missingTestnetConfig = runtimeMode === "testnet" && !VERIFIER_CONTRACT;
   const canSubmit =
     !!publicKey &&
     eligible &&
+    !missingTestnetConfig &&
     status !== "proving" &&
     status !== "pending";
 
@@ -116,7 +127,11 @@ export default function UserClaimPanel({
             <span className="eyebrow">Proof gate</span>
             <span className="status-pill">
               <span className="live-dot" />
-              {VERIFIER_CONTRACT ? "testnet" : walletDemo ? "demo ledger" : "local mvp"}
+              {runtimeMode === "testnet"
+                ? "testnet"
+                : walletDemo
+                  ? "judge demo"
+                  : "local demo"}
             </span>
           </div>
 
@@ -143,7 +158,12 @@ export default function UserClaimPanel({
               This credential does not meet the issuer policy.
             </p>
           )}
-          {VERIFIER_CONTRACT && credential && eligible && (
+          {missingTestnetConfig && (
+            <p className="notice red">
+              Testnet mode needs deployed contract IDs in .env.local.
+            </p>
+          )}
+          {runtimeMode === "testnet" && credential && eligible && (
             <p className="notice purple">
               Testnet mode accepts real circuit proofs only.
             </p>
@@ -165,7 +185,7 @@ export default function UserClaimPanel({
             hash={hash}
             status={status === "proving" ? "pending" : status}
             error={error}
-            explorer={Boolean(VERIFIER_CONTRACT)}
+            explorer={runtimeMode === "testnet" && Boolean(VERIFIER_CONTRACT)}
             successLabel="Wallet authorized and asset released"
           />
         </div>

@@ -9,6 +9,7 @@ import {
   type Credential,
 } from "@/lib/credential";
 import { recordAuditEvent } from "@/lib/demoLedger";
+import type { RuntimeMode } from "@/lib/runtimeMode";
 
 interface FundState {
   status: "idle" | "pending" | "success" | "error";
@@ -29,6 +30,10 @@ const INITIAL_FORM: CredentialForm = {
   accreditation: "2",
   expiry: "2028-12-31",
 };
+
+interface Props {
+  runtimeMode: RuntimeMode;
+}
 
 function fieldId(key: keyof CredentialForm) {
   return `issuer-${key}`;
@@ -59,7 +64,7 @@ function buildCredential(form: CredentialForm): Credential {
   });
 }
 
-export default function IssuerPanel() {
+export default function IssuerPanel({ runtimeMode }: Props) {
   const [fund, setFund] = useState<FundState>({
     status: "idle",
     hash: null,
@@ -180,7 +185,7 @@ export default function IssuerPanel() {
             <span className="eyebrow">Distribution reserve</span>
             <span className="status-pill">
               <span className="live-dot" />
-              staged asset
+              {runtimeMode === "demo" ? "demo reserve" : "manual step"}
             </span>
           </div>
 

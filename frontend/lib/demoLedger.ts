@@ -121,12 +121,22 @@ export function recordAuditEvent(event: Omit<AuditEvent, "id" | "timestamp">) {
   writeJson(AUDIT_KEY, events.slice(0, 12));
 }
 
+export function resetDemoLedger(): void {
+  writeJson<string[]>(NULLIFIERS_KEY, []);
+  writeJson<Record<string, DemoClaim>>(CLAIMS_KEY, {});
+  writeJson<AuditEvent[]>(AUDIT_KEY, []);
+}
+
 export async function recordDemoClaim(
   publicKey: string,
   nullifierBytes: Uint8Array,
   proofBytes: Uint8Array,
   publicInputs: Uint8Array[]
 ): Promise<string> {
+  if (getDemoClaim(publicKey)) {
+    throw new Error("AlreadyAuthorized");
+  }
+
   const nullifier = bytesToHex(nullifierBytes);
   const nullifiers = getNullifiers();
 

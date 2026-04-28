@@ -10,6 +10,7 @@ import { signTransaction } from "@stellar/freighter-api";
 import { rpcServer } from "@/lib/stellar";
 import { NETWORK_PASSPHRASE, VERIFIER_CONTRACT } from "@/constants";
 import { recordDemoClaim } from "@/lib/demoLedger";
+import type { RuntimeMode } from "@/lib/runtimeMode";
 
 export async function invokeContract(
   publicKey: string,
@@ -78,11 +79,16 @@ export async function submitProof(
   publicKey: string,
   proofBytes: Uint8Array,
   publicInputs: Uint8Array[],
-  proofMode: "real" | "demo" = "real"
+  proofMode: "real" | "demo" = "real",
+  runtimeMode: RuntimeMode = VERIFIER_CONTRACT ? "testnet" : "demo"
 ): Promise<string> {
-  if (!VERIFIER_CONTRACT) {
+  if (runtimeMode === "demo") {
     await new Promise((resolve) => setTimeout(resolve, 700));
     return recordDemoClaim(publicKey, publicInputs[0], proofBytes, publicInputs);
+  }
+
+  if (!VERIFIER_CONTRACT) {
+    throw new Error("Missing deployed verifier contract for testnet mode.");
   }
 
   if (proofMode !== "real") {

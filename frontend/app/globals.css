@@ -169,6 +169,40 @@ a {
   color: var(--white);
 }
 
+.mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.mode-button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 10px;
+  background: transparent;
+  color: #444444;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.mode-button.active {
+  background: var(--text-primary);
+  color: var(--white);
+}
+
+.mode-button:disabled {
+  color: var(--text-secondary);
+  opacity: 0.45;
+}
+
 .topbar-actions {
   grid-area: actions;
   justify-content: flex-end;
@@ -332,7 +366,8 @@ p {
 .proof-card,
 .issuer-card,
 .audit-card,
-.side-section {
+.side-section,
+.crash-card {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: transparent;
@@ -463,6 +498,10 @@ p {
   line-height: 1.55;
 }
 
+.section-heading .button {
+  margin-top: 14px;
+}
+
 .claim-grid,
 .issuer-grid {
   display: grid;
@@ -473,9 +512,30 @@ p {
 .credential-card,
 .proof-card,
 .issuer-card,
-.side-section {
+.side-section,
+.crash-card {
   padding: 20px;
   min-width: 0;
+}
+
+.crash-card {
+  max-width: 720px;
+  margin: 64px auto;
+  display: grid;
+  gap: 16px;
+}
+
+.crash-card h1 {
+  margin: 0;
+  font-size: 42px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.crash-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .data-grid {
@@ -1029,6 +1089,14 @@ p {
     gap: 10px;
   }
 
+  .mode-switch {
+    width: 100%;
+  }
+
+  .mode-button {
+    flex: 1 1 0;
+  }
+
   .balance-values {
     width: 100%;
     justify-content: space-between;
@@ -1048,6 +1116,7 @@ p {
   .proof-card,
   .issuer-card,
   .side-section,
+  .crash-card,
   .stat-card,
   .audit-card {
     padding: 16px;

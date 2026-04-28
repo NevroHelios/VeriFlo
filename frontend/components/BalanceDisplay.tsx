@@ -1,40 +1,53 @@
 "use client";
 
+import { useEffect } from "react";
 import { useBalance } from "@/hooks/useBalance";
 
 interface Props {
   publicKey: string | null;
+  demo?: boolean;
+  refreshKey?: number;
 }
 
-export default function BalanceDisplay({ publicKey }: Props) {
-  const { xlm, vfly, loading, error, refetch } = useBalance(publicKey);
+export default function BalanceDisplay({
+  publicKey,
+  demo = false,
+  refreshKey = 0,
+}: Props) {
+  const { xlm, vfly, loading, error, refetch } = useBalance(publicKey, demo);
+
+  useEffect(() => {
+    refetch();
+  }, [refreshKey, refetch]);
 
   if (!publicKey) return null;
 
   return (
-    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-      <div className="flex gap-6 text-sm">
+    <div className="balance-strip">
+      <div className="balance-values">
         <div>
-          <span className="text-slate-400">XLM</span>{" "}
-          <span className="font-mono font-semibold text-white">
-            {loading ? "…" : xlm}
-          </span>
+          <span>XLM</span>
+          <strong className="mono">
+            {loading ? "..." : xlm}
+          </strong>
         </div>
         <div>
-          <span className="text-slate-400">VFLY</span>{" "}
-          <span className="font-mono font-semibold text-indigo-300">
-            {loading ? "…" : vfly}
-          </span>
+          <span>VFLY</span>
+          <strong className="mono accent-teal">
+            {loading ? "..." : vfly}
+          </strong>
         </div>
       </div>
       <button
         onClick={refetch}
         disabled={loading}
-        className="text-xs text-slate-400 hover:text-white disabled:opacity-50 transition-colors"
+        className="icon-button"
+        aria-label="Refresh balances"
+        title="Refresh balances"
       >
-        ↻ Refresh
+        R
       </button>
-      {error && <p className="text-red-400 text-xs">{error}</p>}
+      {error && <p className="inline-error">{error}</p>}
     </div>
   );
 }

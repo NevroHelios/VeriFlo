@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, contracterror, Address, Env, String};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, String};
 
 #[contracttype]
 pub enum DataKey {
@@ -84,12 +84,7 @@ impl VflyToken {
             .unwrap_or(0)
     }
 
-    pub fn transfer(
-        env: Env,
-        from: Address,
-        to: Address,
-        amount: i128,
-    ) -> Result<(), TokenError> {
+    pub fn transfer(env: Env, from: Address, to: Address, amount: i128) -> Result<(), TokenError> {
         from.require_auth();
         if !Self::authorized(env.clone(), from.clone()) {
             return Err(TokenError::NotAuthorized);

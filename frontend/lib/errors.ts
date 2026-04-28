@@ -1,5 +1,12 @@
 export interface VerifloError {
-  type: "WALLET_REJECTED" | "INSUFFICIENT_XLM" | "PROOF_REJECTED" | "UNTRUSTED_ROOT" | "ALREADY_AUTHORIZED" | "CONTRACT_ERROR";
+  type:
+    | "WALLET_REJECTED"
+    | "INSUFFICIENT_XLM"
+    | "PROOF_REJECTED"
+    | "UNTRUSTED_ROOT"
+    | "ALREADY_AUTHORIZED"
+    | "ZK_ASSETS_MISSING"
+    | "CONTRACT_ERROR";
   message: string;
   recovery: string;
 }
@@ -46,6 +53,22 @@ export function parseError(err: unknown): VerifloError {
       type: "UNTRUSTED_ROOT",
       message: "Credential root not trusted.",
       recovery: "The Merkle root in your credential is not registered with this verifier. Contact your issuer.",
+    };
+  }
+
+  if (raw.includes("real zk proof unavailable") || raw.includes("demo proof cannot")) {
+    return {
+      type: "ZK_ASSETS_MISSING",
+      message: "Real ZK proof is not available.",
+      recovery: "Run npm run prepare:circuits and use a credential generated for the registered root.",
+    };
+  }
+
+  if (raw.includes("recipientmismatch") || raw.includes("error(contract, 9)")) {
+    return {
+      type: "PROOF_REJECTED",
+      message: "Proof is bound to a different wallet.",
+      recovery: "Reconnect the wallet that owns this credential proof.",
     };
   }
 

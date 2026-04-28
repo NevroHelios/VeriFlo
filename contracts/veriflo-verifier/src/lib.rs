@@ -1,7 +1,7 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contractimpl, contracttype, contracterror,
-    Address, Bytes, BytesN, Env, Vec,
+    contract, contracterror, contractimpl, contracttype, crypto::bn254::Fr, xdr::ToXdr, Address,
+    Bytes, BytesN, Env, Vec,
 };
 
 mod token_interface {
@@ -16,6 +16,20 @@ mod token_interface {
 }
 
 use token_interface::VflyTokenClient;
+
+mod kyc_interface {
+    use soroban_sdk::{contractclient, crypto::bn254::Fr, Bytes, Env, Vec};
+
+    #[allow(dead_code)]
+    #[contractclient(name = "KycVerifierClient")]
+    pub trait KycVerifierInterface {
+        fn verify(env: Env, proof_bytes: Bytes, pub_inputs: Vec<Fr>) -> bool;
+    }
+}
+
+use kyc_interface::KycVerifierClient;
+
+const PUBLIC_INPUT_COUNT: u32 = 5;
 
 #[contracttype]
 pub enum DataKey {
@@ -46,6 +60,7 @@ pub enum VerifierError {
     Unauthorized = 6,
     UntrustedRoot = 7,
     MalformedInputs = 8,
+    RecipientMismatch = 9,
 }
 
 #[contract]
@@ -64,23 +79,33 @@ impl VerifloVerifier {
             return Err(VerifierError::AlreadyInitialized);
         }
         env.storage().instance().set(&DataKey::Admin, &admin);
-        env.storage().instance().set(&DataKey::TokenContract, &token_contract);
-        env.storage().instance().set(&DataKey::KycVerifier, &kyc_verifier);
-        env.storage().instance().set(&DataKey::MintAmount, &mint_amount);
+        env.storage()
+            .instance()
+            .set(&DataKey::TokenContract, &token_contract);
+        env.storage()
+            .instance()
+            .set(&DataKey::KycVerifier, &kyc_verifier);
+        env.storage()
+            .instance()
+            .set(&DataKey::MintAmount, &mint_amount);
         Ok(())
     }
 
     pub fn add_trusted_root(env: Env, root: BytesN<32>) -> Result<(), VerifierError> {
         let admin = Self::get_admin(&env)?;
         admin.require_auth();
-        env.storage().persistent().set(&DataKey::TrustedRoot(root), &true);
+        env.storage()
+            .persistent()
+            .set(&DataKey::TrustedRoot(root), &true);
         Ok(())
     }
 
     pub fn remove_trusted_root(env: Env, root: BytesN<32>) -> Result<(), VerifierError> {
         let admin = Self::get_admin(&env)?;
         admin.require_auth();
-        env.storage().persistent().remove(&DataKey::TrustedRoot(root));
+        env.storage()
+            .persistent()
+            .remove(&DataKey::TrustedRoot(root));
         Ok(())
     }
 
@@ -104,7 +129,7 @@ impl VerifloVerifier {
             .instance()
             .get(&DataKey::TokenContract)
             .ok_or(VerifierError::NotInitialized)?;
-        let _kyc_address: Address = env
+        let kyc_address: Address = env
             .storage()
             .instance()
             .get(&DataKey::KycVerifier)
@@ -127,12 +152,13 @@ impl VerifloVerifier {
             return Err(VerifierError::AlreadyAuthorized);
         }
 
-        if pub_inputs.len() < 2 {
+        if pub_inputs.len() != PUBLIC_INPUT_COUNT {
             return Err(VerifierError::MalformedInputs);
         }
 
         let nullifier: BytesN<32> = pub_inputs.get(0).unwrap();
         let merkle_root: BytesN<32> = pub_inputs.get(1).unwrap();
+        let recipient: BytesN<32> = pub_inputs.get(4).unwrap();
 
         if !env
             .storage()
@@ -156,7 +182,23 @@ impl VerifloVerifier {
             return Err(VerifierError::ProofInvalid);
         }
 
-        env.storage().persistent().set(&DataKey::Nullifier(nullifier), &true);
+        if recipient != Self::recipient_field(&env, &user) {
+            return Err(VerifierError::RecipientMismatch);
+        }
+
+        let mut fr_inputs: Vec<Fr> = Vec::new(&env);
+        for input in pub_inputs.iter() {
+            fr_inputs.push_back(Fr::from_bytes(input));
+        }
+
+        let kyc_client = KycVerifierClient::new(&env, &kyc_address);
+        if !kyc_client.verify(&proof, &fr_inputs) {
+            return Err(VerifierError::ProofInvalid);
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Nullifier(nullifier), &true);
 
         let token_client = VflyTokenClient::new(&env, &token_address);
         token_client.set_authorized(&user, &true);
@@ -193,6 +235,15 @@ impl VerifloVerifier {
             .get(&DataKey::Admin)
             .ok_or(VerifierError::NotInitialized)
     }
+
+    fn recipient_field(env: &Env, user: &Address) -> BytesN<32> {
+        let digest = env.crypto().sha256(&user.clone().to_xdr(env)).to_array();
+        let mut field = [0u8; 32];
+        for i in 0..31 {
+            field[i + 1] = digest[i];
+        }
+        BytesN::from_array(env, &field)
+    }
 }
 
 #[cfg(test)]
@@ -202,14 +253,32 @@ mod tests {
     use soroban_sdk::{Address, Bytes, BytesN, Env, String, Vec};
 
     mod token_wasm {
-        soroban_sdk::contractimport!(
-            file = "../../target/wasm32v1-none/release/vfly_token.wasm"
-        );
+        soroban_sdk::contractimport!(file = "../../target/wasm32v1-none/release/vfly_token.wasm");
+    }
+
+    #[contract]
+    pub struct MockKycVerifier;
+
+    #[contractimpl]
+    impl MockKycVerifier {
+        pub fn verify(_env: Env, proof_bytes: Bytes, pub_inputs: Vec<Fr>) -> bool {
+            proof_bytes.len() == 256
+                && proof_bytes.get(0).unwrap_or(0) == 0x2a
+                && pub_inputs.len() == PUBLIC_INPUT_COUNT
+        }
     }
 
     fn make_proof(env: &Env, len: u32) -> Bytes {
         let mut bytes = Bytes::new(env);
         for i in 0u32..len {
+            bytes.push_back(if i == 0 { 0x2a } else { (i % 256) as u8 });
+        }
+        bytes
+    }
+
+    fn make_invalid_kyc_proof(env: &Env) -> Bytes {
+        let mut bytes = Bytes::new(env);
+        for i in 0u32..256 {
             bytes.push_back((i % 256) as u8);
         }
         bytes
@@ -219,13 +288,18 @@ mod tests {
         BytesN::from_array(env, &[seed; 32])
     }
 
-    fn make_pub_inputs(env: &Env, nullifier: BytesN<32>, root: BytesN<32>) -> Vec<BytesN<32>> {
+    fn make_pub_inputs(
+        env: &Env,
+        nullifier: BytesN<32>,
+        root: BytesN<32>,
+        user: &Address,
+    ) -> Vec<BytesN<32>> {
         let mut v: Vec<BytesN<32>> = Vec::new(env);
         v.push_back(nullifier);
         v.push_back(root);
         v.push_back(BytesN::from_array(env, &[0u8; 32])); // min_accreditation
         v.push_back(BytesN::from_array(env, &[0u8; 32])); // current_time
-        v.push_back(BytesN::from_array(env, &[0u8; 32])); // recipient_fr
+        v.push_back(VerifloVerifier::recipient_field(env, user));
         v
     }
 
@@ -233,7 +307,7 @@ mod tests {
         env.mock_all_auths();
 
         let token_id = env.register(token_wasm::WASM, ());
-        let kyc_id = Address::generate(env);
+        let kyc_id = env.register(MockKycVerifier, ());
         let verifier_id = env.register(VerifloVerifier, ());
         let admin = Address::generate(env);
 
@@ -277,10 +351,29 @@ mod tests {
 
         let user = Address::generate(&env);
         let nullifier = make_root(&env, 0x01);
-        let pub_inputs = make_pub_inputs(&env, nullifier, root);
+        let pub_inputs = make_pub_inputs(&env, nullifier, root, &user);
 
         let short_proof = make_proof(&env, 10);
         let result = verifier_client.try_verify_and_authorize(&short_proof, &pub_inputs, &user);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_wrong_public_input_count_rejected() {
+        let env = Env::default();
+        let (_, _, verifier_id, _admin) = setup(&env);
+        let verifier_client = VerifloVerifierClient::new(&env, &verifier_id);
+
+        let root = make_root(&env, 0xAA);
+        verifier_client.add_trusted_root(&root);
+
+        let user = Address::generate(&env);
+        let mut pub_inputs: Vec<BytesN<32>> = Vec::new(&env);
+        pub_inputs.push_back(make_root(&env, 0x01));
+        pub_inputs.push_back(root);
+
+        let result =
+            verifier_client.try_verify_and_authorize(&make_proof(&env, 256), &pub_inputs, &user);
         assert!(result.is_err());
     }
 
@@ -293,10 +386,34 @@ mod tests {
         let user = Address::generate(&env);
         let nullifier = make_root(&env, 0x01);
         let unknown_root = make_root(&env, 0xFF);
-        let pub_inputs = make_pub_inputs(&env, nullifier, unknown_root);
+        let pub_inputs = make_pub_inputs(&env, nullifier, unknown_root, &user);
 
-        let result = verifier_client.try_verify_and_authorize(&make_proof(&env, 256), &pub_inputs, &user);
+        let result =
+            verifier_client.try_verify_and_authorize(&make_proof(&env, 256), &pub_inputs, &user);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_failed_kyc_verification_rejected() {
+        let env = Env::default();
+        let (token_id, _, verifier_id, _admin) = setup(&env);
+        let verifier_client = VerifloVerifierClient::new(&env, &verifier_id);
+        let token_client = token_wasm::Client::new(&env, &token_id);
+
+        let root = make_root(&env, 0xAA);
+        verifier_client.add_trusted_root(&root);
+
+        let nullifier = make_root(&env, 0x01);
+        let user = Address::generate(&env);
+        let pub_inputs = make_pub_inputs(&env, nullifier, root, &user);
+
+        let result = verifier_client.try_verify_and_authorize(
+            &make_invalid_kyc_proof(&env),
+            &pub_inputs,
+            &user,
+        );
+        assert!(result.is_err());
+        assert_eq!(token_client.balance(&user), 0);
     }
 
     #[test]
@@ -309,13 +426,18 @@ mod tests {
         verifier_client.add_trusted_root(&root);
 
         let nullifier = make_root(&env, 0x01);
-        let pub_inputs = make_pub_inputs(&env, nullifier, root);
 
         let user = Address::generate(&env);
+        let pub_inputs = make_pub_inputs(&env, nullifier.clone(), root.clone(), &user);
         verifier_client.verify_and_authorize(&make_proof(&env, 256), &pub_inputs, &user);
 
         let user2 = Address::generate(&env);
-        let result = verifier_client.try_verify_and_authorize(&make_proof(&env, 256), &pub_inputs, &user2);
+        let replay_inputs = make_pub_inputs(&env, nullifier, root, &user2);
+        let result = verifier_client.try_verify_and_authorize(
+            &make_proof(&env, 256),
+            &replay_inputs,
+            &user2,
+        );
         assert!(result.is_err());
     }
 
@@ -330,12 +452,37 @@ mod tests {
         verifier_client.add_trusted_root(&root);
 
         let nullifier = make_root(&env, 0x01);
-        let pub_inputs = make_pub_inputs(&env, nullifier, root);
         let user = Address::generate(&env);
+        let pub_inputs = make_pub_inputs(&env, nullifier, root, &user);
 
-        let result = verifier_client.verify_and_authorize(&make_proof(&env, 256), &pub_inputs, &user);
+        let result =
+            verifier_client.verify_and_authorize(&make_proof(&env, 256), &pub_inputs, &user);
         assert_eq!(result, true);
         assert_eq!(token_client.balance(&user), 1_000_000_000);
+    }
+
+    #[test]
+    fn test_proof_for_different_wallet_rejected() {
+        let env = Env::default();
+        let (token_id, _, verifier_id, _admin) = setup(&env);
+        let verifier_client = VerifloVerifierClient::new(&env, &verifier_id);
+        let token_client = token_wasm::Client::new(&env, &token_id);
+
+        let root = make_root(&env, 0xAA);
+        verifier_client.add_trusted_root(&root);
+
+        let proof_owner = Address::generate(&env);
+        let attacker = Address::generate(&env);
+        let nullifier = make_root(&env, 0x01);
+        let pub_inputs = make_pub_inputs(&env, nullifier, root, &proof_owner);
+
+        let result = verifier_client.try_verify_and_authorize(
+            &make_proof(&env, 256),
+            &pub_inputs,
+            &attacker,
+        );
+        assert!(result.is_err());
+        assert_eq!(token_client.balance(&attacker), 0);
     }
 
     #[test]
@@ -349,12 +496,13 @@ mod tests {
 
         let user = Address::generate(&env);
         let n1 = make_root(&env, 0x01);
-        let pub_inputs1 = make_pub_inputs(&env, n1, root.clone());
+        let pub_inputs1 = make_pub_inputs(&env, n1, root.clone(), &user);
         verifier_client.verify_and_authorize(&make_proof(&env, 256), &pub_inputs1, &user);
 
         let n2 = make_root(&env, 0x02);
-        let pub_inputs2 = make_pub_inputs(&env, n2, root);
-        let result = verifier_client.try_verify_and_authorize(&make_proof(&env, 256), &pub_inputs2, &user);
+        let pub_inputs2 = make_pub_inputs(&env, n2, root, &user);
+        let result =
+            verifier_client.try_verify_and_authorize(&make_proof(&env, 256), &pub_inputs2, &user);
         assert!(result.is_err());
     }
 

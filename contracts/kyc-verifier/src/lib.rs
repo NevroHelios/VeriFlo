@@ -4,9 +4,9 @@ extern crate alloc;
 mod vk_constants;
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, contracterror,
-    Bytes, BytesN, Env, Vec,
+    contract, contracterror, contractimpl,
     crypto::bn254::{Bn254G1Affine as G1, Bn254G2Affine as G2, Fr},
+    Bytes, BytesN, Env, Vec,
 };
 
 use vk_constants::vk as VK;
@@ -21,7 +21,6 @@ pub enum VerifierError {
 }
 
 // A Groth16 proof: A (G1, 64B) || B (G2, 128B) || C (G1, 64B) = 256 bytes
-#[contracttype]
 #[derive(Clone)]
 pub struct Groth16Proof {
     pub a: G1,
@@ -59,13 +58,17 @@ fn parse_proof(_env: &Env, proof_bytes: Bytes) -> Result<Groth16Proof, VerifierE
 
 fn load_vk(env: &Env) -> (G1, G2, G2, G2, Vec<G1>) {
     let alpha = G1::from_bytes(BytesN::from_array(env, &VK::VK_ALPHA));
-    let beta  = G2::from_bytes(BytesN::from_array(env, &VK::VK_BETA));
+    let beta = G2::from_bytes(BytesN::from_array(env, &VK::VK_BETA));
     let gamma = G2::from_bytes(BytesN::from_array(env, &VK::VK_GAMMA));
     let delta = G2::from_bytes(BytesN::from_array(env, &VK::VK_DELTA));
 
     let ic_arrays: [&[u8; 64]; 6] = [
-        &VK::VK_IC_0, &VK::VK_IC_1, &VK::VK_IC_2,
-        &VK::VK_IC_3, &VK::VK_IC_4, &VK::VK_IC_5,
+        &VK::VK_IC_0,
+        &VK::VK_IC_1,
+        &VK::VK_IC_2,
+        &VK::VK_IC_3,
+        &VK::VK_IC_4,
+        &VK::VK_IC_5,
     ];
     let mut ic: Vec<G1> = Vec::new(env);
     for arr in ic_arrays.iter() {
@@ -128,7 +131,7 @@ impl KycVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{Env, Bytes};
+    use soroban_sdk::{Bytes, Env};
 
     #[test]
     fn test_reject_malformed_proof_wrong_length() {

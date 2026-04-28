@@ -6,8 +6,10 @@ interface Props {
   publicKey: string | null;
   connected: boolean;
   connecting: boolean;
+  demo: boolean;
   error: VerifloError | null;
   connect: () => void;
+  connectDemo: () => void;
   disconnect: () => void;
 }
 
@@ -15,34 +17,43 @@ export default function WalletButton({
   publicKey,
   connected,
   connecting,
+  demo,
   error,
   connect,
+  connectDemo,
   disconnect,
 }: Props) {
   const truncated = publicKey
-    ? `${publicKey.slice(0, 6)}…${publicKey.slice(-4)}`
+    ? `${publicKey.slice(0, 6)}...${publicKey.slice(-4)}`
     : null;
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className="wallet-actions">
       {connected ? (
         <button
           onClick={disconnect}
-          className="px-4 py-2 rounded-lg bg-slate-700 text-white text-sm font-mono hover:bg-slate-600 transition-colors"
+          className="wallet-chip"
         >
-          {truncated} · Disconnect
+          <span className="live-dot" />
+          <span>{demo ? "Demo" : "Freighter"}</span>
+          <span className="mono">{truncated}</span>
         </button>
       ) : (
-        <button
-          onClick={connect}
-          disabled={connecting}
-          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 disabled:opacity-50 transition-colors"
-        >
-          {connecting ? "Connecting…" : "Connect Wallet"}
-        </button>
+        <div className="wallet-connect-row">
+          <button
+            onClick={connect}
+            disabled={connecting}
+            className="button button-primary"
+          >
+            {connecting ? "Connecting..." : "Connect Freighter"}
+          </button>
+          <button onClick={connectDemo} className="button button-secondary">
+            Demo wallet
+          </button>
+        </div>
       )}
       {error && (
-        <p className="text-red-400 text-xs max-w-xs text-right">
+        <p className="wallet-error">
           {error.message}
         </p>
       )}

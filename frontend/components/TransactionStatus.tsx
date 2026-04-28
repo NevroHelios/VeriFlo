@@ -8,15 +8,24 @@ interface Props {
   hash: string | null;
   status: "idle" | "pending" | "success" | "error";
   error: VerifloError | null;
+  explorer?: boolean;
+  successLabel?: string;
 }
 
-export default function TransactionStatus({ hash, status, error }: Props) {
+export default function TransactionStatus({
+  hash,
+  status,
+  error,
+  explorer = true,
+  successLabel = "Transaction confirmed",
+}: Props) {
   if (status === "idle") return null;
 
   if (status === "pending") {
     return (
-      <div className="flex items-center gap-2 text-sm text-slate-300">
-        <span className="animate-spin">⟳</span> Submitting transaction…
+      <div className="tx-status pending">
+        <span className="spinner" />
+        <span>Submitting transaction...</span>
       </div>
     );
   }
@@ -26,18 +35,22 @@ export default function TransactionStatus({ hash, status, error }: Props) {
   }
 
   if (status === "success" && hash) {
-    const truncated = `${hash.slice(0, 8)}…${hash.slice(-8)}`;
+    const truncated = `${hash.slice(0, 8)}...${hash.slice(-8)}`;
     return (
-      <div className="border border-green-500 bg-green-950 text-green-200 rounded-lg p-4 flex flex-col gap-1">
-        <span className="font-semibold text-sm">Transaction confirmed</span>
-        <a
-          href={`${STELLAR_EXPERT_URL}/tx/${hash}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs font-mono underline opacity-80 hover:opacity-100 break-all"
-        >
-          {truncated}
-        </a>
+      <div className="tx-status success">
+        <span>{successLabel}</span>
+        {explorer ? (
+          <a
+            href={`${STELLAR_EXPERT_URL}/tx/${hash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hash-text"
+          >
+            {truncated}
+          </a>
+        ) : (
+          <span className="hash-text">{truncated}</span>
+        )}
       </div>
     );
   }

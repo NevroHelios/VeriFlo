@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useRef, useState } from "react";
 import {
-  loadCredential,
-  saveCredential,
   clearCredential,
+  createDemoCredential,
+  loadCredential,
   parseCredentialFile,
+  saveCredential,
   type Credential,
 } from "@/lib/credential";
 
@@ -24,6 +25,7 @@ export default function CredentialPanel({ onCredentialChange }: Props) {
   function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+
     setError(null);
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -46,49 +48,79 @@ export default function CredentialPanel({ onCredentialChange }: Props) {
     if (fileRef.current) fileRef.current.value = "";
   }
 
+  function handleDemoCredential() {
+    const cred = createDemoCredential();
+    saveCredential(cred);
+    setCredential(cred);
+    onCredentialChange(cred);
+    setError(null);
+  }
+
   return (
-    <div className="flex flex-col gap-3">
-      <h2 className="text-lg font-semibold text-white">KYC Credential</h2>
+    <div className="credential-card">
+      <div className="panel-heading">
+        <span className="eyebrow">ZK credential</span>
+        <span className={credential ? "status-pill" : "status-pill muted"}>
+          <span className="live-dot" />
+          {credential ? "loaded" : "empty"}
+        </span>
+      </div>
+
       {credential ? (
-        <div className="rounded-lg bg-slate-800 border border-slate-700 p-4 flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-green-400 text-sm font-medium">Credential loaded</span>
-          </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-400">
-            <dt>Jurisdiction</dt>
-            <dd className="text-slate-200">{credential.jurisdiction}</dd>
-            <dt>Accreditation</dt>
-            <dd className="text-slate-200">{credential.accreditation}</dd>
-            <dt>Expires</dt>
-            <dd className="text-slate-200">
-              {new Date(credential.expiry * 1000).toLocaleDateString()}
-            </dd>
+        <div className="credential-loaded">
+          <dl className="data-grid">
+            <div>
+              <dt>Jurisdiction</dt>
+              <dd>{credential.jurisdiction}</dd>
+            </div>
+            <div>
+              <dt>Accreditation</dt>
+              <dd>Tier {credential.accreditation}</dd>
+            </div>
+            <div>
+              <dt>Expires</dt>
+              <dd>{new Date(credential.expiry * 1000).toLocaleDateString()}</dd>
+            </div>
+            <div>
+              <dt>Issuer</dt>
+              <dd>{credential.issuer_id}</dd>
+            </div>
           </dl>
-          <button
-            onClick={handleClear}
-            className="mt-1 text-xs text-slate-400 hover:text-red-400 transition-colors self-start"
-          >
+
+          <div>
+            <span className="eyebrow">Merkle root</span>
+            <p className="hash-text">{credential.merkle_root}</p>
+          </div>
+
+          <button onClick={handleClear} className="button button-secondary">
             Remove credential
           </button>
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-slate-600 p-4 flex flex-col gap-2 items-center">
-          <p className="text-slate-400 text-sm text-center">
-            Import a credential JSON file issued by your KYC provider.
+        <div className="empty-credential">
+          <p>
+            Portable eligibility file from a bank, government portal, or KYC
+            provider.
           </p>
-          <label className="px-4 py-2 rounded-lg bg-slate-700 text-white text-sm font-medium cursor-pointer hover:bg-slate-600 transition-colors">
-            Import credential
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              onChange={handleImport}
-            />
-          </label>
-          {error && (
-            <p className="text-red-400 text-xs">{error}</p>
-          )}
+          <div className="button-row">
+            <label className="button button-primary file-button">
+              Import credential
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".json,application/json"
+                className="sr-only"
+                onChange={handleImport}
+              />
+            </label>
+            <button
+              onClick={handleDemoCredential}
+              className="button button-secondary"
+            >
+              Demo credential
+            </button>
+          </div>
+          {error && <p className="inline-error">{error}</p>}
         </div>
       )}
     </div>

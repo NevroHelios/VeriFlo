@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "VeriFlo — ZK Identity on Stellar",
-  description: "Privacy-preserving identity verification powered by Soroban smart contracts.",
+  title: "VeriFlo - Compliant Asset Distribution on Stellar",
+  description:
+    "Privacy-preserving eligibility proofs for regulated Stellar asset distribution.",
 };
 
 export default function RootLayout({
@@ -13,9 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased bg-slate-900 text-slate-100 min-h-screen">
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

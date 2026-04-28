@@ -8,13 +8,29 @@ import TransactionStatus from "@/components/TransactionStatus";
 import CredentialPanel from "@/components/CredentialPanel";
 import type { Credential } from "@/lib/credential";
 import { loadCredential } from "@/lib/credential";
+import { VERIFIER_CONTRACT } from "@/constants";
 
 interface Props {
   publicKey: string | null;
+  walletDemo?: boolean;
   onSuccess?: () => void;
 }
 
-export default function UserClaimPanel({ publicKey, onSuccess }: Props) {
+const MIN_ACCREDITATION = 1;
+
+function formatDate(timestamp: number) {
+  return new Date(timestamp * 1000).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+export default function UserClaimPanel({
+  publicKey,
+  walletDemo = false,
+  onSuccess,
+}: Props) {
   const [credential, setCredential] = useState<Credential | null>(() => {
     if (typeof window === "undefined") return null;
     return loadCredential();
@@ -29,9 +45,13 @@ export default function UserClaimPanel({ publicKey, onSuccess }: Props) {
     setHash(null);
     setError(null);
     try {
-      const { proofBytes, publicInputs } = await generateProof(credential, publicKey);
+      const { proofBytes, publicInputs, mode } = await generateProof(
+        credential,
+        publicKey,
+        { allowDemoProof: !VERIFIER_CONTRACT }
+      );
       setStatus("pending");
-      const txHash = await submitProof(publicKey, proofBytes, publicInputs);
+      const txHash = await submitProof(publicKey, proofBytes, publicInputs, mode);
       setHash(txHash);
       setStatus("success");
       onSuccess?.();
@@ -41,39 +61,114 @@ export default function UserClaimPanel({ publicKey, onSuccess }: Props) {
     }
   }
 
-  const canSubmit = !!publicKey && !!credential && status !== "proving" && status !== "pending";
+  const isExpired = credential
+    ? credential.expiry <= Math.floor(Date.now() / 1000)
+    : false;
+  const hasTier = credential
+    ? credential.accreditation >= MIN_ACCREDITATION
+    : false;
+  const eligible = !!credential && !isExpired && hasTier;
+  const canSubmit =
+    !!publicKey &&
+    eligible &&
+    status !== "proving" &&
+    status !== "pending";
+
+  const checks = [
+    {
+      label: "Wallet-bound proof",
+      value: publicKey ? "Ready" : "No wallet",
+      state: publicKey ? "pass" : "idle",
+    },
+    {
+      label: "Credential root",
+      value: credential ? "Trusted demo root" : "Missing",
+      state: credential ? "pass" : "idle",
+    },
+    {
+      label: "Accreditation",
+      value: credential ? `Tier ${credential.accreditation}` : "Missing",
+      state: credential ? (hasTier ? "pass" : "fail") : "idle",
+    },
+    {
+      label: "Expiry",
+      value: credential ? formatDate(credential.expiry) : "Missing",
+      state: credential ? (isExpired ? "fail" : "pass") : "idle",
+    },
+  ];
 
   return (
-    <div className="flex flex-col gap-6">
-      <CredentialPanel onCredentialChange={setCredential} />
-
-      <div className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold text-white">Submit KYC Proof</h2>
-        <p className="text-slate-400 text-sm">
-          Your credential stays private. A zero-knowledge proof is generated in your browser
-          and submitted on-chain to authorize your wallet and mint VFLY tokens.
+    <div className="panel-stack">
+      <div className="section-heading">
+        <span className="eyebrow">Investor claim</span>
+        <h2>Verify eligibility, then receive the asset</h2>
+        <p>
+          VeriFlo proves eligibility in the wallet and writes only protocol
+          authorization state to Stellar.
         </p>
-        {!publicKey && (
-          <p className="text-yellow-400 text-sm">Connect your wallet first.</p>
-        )}
-        {publicKey && !credential && (
-          <p className="text-yellow-400 text-sm">Import a credential above to continue.</p>
-        )}
-        {canSubmit && (
+      </div>
+
+      <div className="claim-grid">
+        <CredentialPanel onCredentialChange={setCredential} />
+
+        <div className="proof-card">
+          <div className="panel-heading">
+            <span className="eyebrow">Proof gate</span>
+            <span className="status-pill">
+              <span className="live-dot" />
+              {VERIFIER_CONTRACT ? "testnet" : walletDemo ? "demo ledger" : "local mvp"}
+            </span>
+          </div>
+
+          <div className="check-list">
+            {checks.map((check) => (
+              <div className={`check-row ${check.state}`} key={check.label}>
+                <span className="check-dot" />
+                <div>
+                  <strong>{check.label}</strong>
+                  <span>{check.value}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {!publicKey && (
+            <p className="notice red">Connect Freighter or use the demo wallet.</p>
+          )}
+          {publicKey && !credential && (
+            <p className="notice purple">Load a credential from the KYC provider.</p>
+          )}
+          {credential && !eligible && (
+            <p className="notice red">
+              This credential does not meet the issuer policy.
+            </p>
+          )}
+          {VERIFIER_CONTRACT && credential && eligible && (
+            <p className="notice purple">
+              Testnet mode accepts real circuit proofs only.
+            </p>
+          )}
+
           <button
             onClick={handleSubmit}
-            className="px-4 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-500 transition-colors"
+            disabled={!canSubmit}
+            className="button button-primary button-wide"
           >
-            Generate proof &amp; claim VFLY
+            {status === "proving"
+                ? "Generating proof..."
+              : status === "pending"
+                ? "Submitting..."
+                : "Verify and receive VFLY"}
           </button>
-        )}
-        {status === "proving" && (
-          <p className="text-slate-300 text-sm">Generating zero-knowledge proof…</p>
-        )}
-        {status === "pending" && (
-          <p className="text-slate-300 text-sm">Submitting proof on-chain…</p>
-        )}
-        <TransactionStatus hash={hash} status={status === "proving" ? "pending" : status} error={error} />
+
+          <TransactionStatus
+            hash={hash}
+            status={status === "proving" ? "pending" : status}
+            error={error}
+            explorer={Boolean(VERIFIER_CONTRACT)}
+            successLabel="Wallet authorized and asset released"
+          />
+        </div>
       </div>
     </div>
   );

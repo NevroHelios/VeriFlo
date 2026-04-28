@@ -1,25 +1,44 @@
 # ZK Architecture
 
-## Prototype (Current)
+## Current MVP
 
-The verifier contract uses a **mock ZK check**: `proof.len() > 32`. This is explicitly disclosed in the README and in the contract source.
+VeriFlo now has a real two-contract verification path:
 
-**Replay prevention is real:** the contract computes `sha256(proof)` and stores the resulting 32-byte nullifier in persistent storage. A proof can only be used once, even in the mock implementation.
+- `kyc-verifier` parses a 256-byte Groth16 proof and verifies it with Stellar
+  Protocol 25 BN254 host functions.
+- `veriflo-verifier` enforces issuer policy state: trusted Merkle root,
+  nullifier replay protection, wallet binding, KYC verifier result, then VFLY
+  authorization and minting.
 
-## Production Design
+The public inputs are fixed and must contain exactly five 32-byte field values:
 
-A real ZK circuit would replace the length check with a Groth16 verifier.
+```text
+[nullifier, merkle_root, min_accreditation, current_time, recipient]
+```
 
-**Protocol 25 (BN254)** — live on Stellar mainnet since January 22, 2026 — provides the necessary host functions:
+The recipient field is deterministic: `0x00 || first31(sha256(ScVal::Address
+XDR))`. The contract recomputes that value from the signed `user` address, so a
+proof generated for one wallet cannot be submitted by another wallet.
 
-- `env.crypto().bn254_g1_add()`
-- `env.crypto().bn254_g1_mul()`
-- `env.crypto().bn254_pairing_check()`
+## Frontend Proof Modes
 
-A Groth16 verifier built on these primitives can verify a proof that the user knows a secret (e.g., a government ID credential) without revealing it.
+The frontend has two explicit modes:
 
-**Estimated effort:** 3–4 weeks to implement a full Groth16 verifier contract + matching circuit in Circom or Noir.
+- Local MVP mode, when no deployed verifier contract is configured. It uses the
+  browser-local demo ledger and can accept demo credentials.
+- Testnet mode, when `NEXT_PUBLIC_VERIFIER_CONTRACT` is configured. It refuses
+  demo proofs and only submits real `snarkjs` Groth16 proofs.
 
-## Why Mocked for This Prototype
+`npm run dev` and `npm run build` run `npm run prepare:circuits`, which copies
+the circuit WASM and final zkey into `frontend/public/circuits`.
 
-No `groth16_verify()` host function exists. The BN254 primitives are available but building a complete verifier on top is weeks of work. The architecture — contract flow, nullifiers, cross-contract admin calls, frontend integration — is identical whether the ZK check is real or mocked.
+## Known Production Gap
+
+The current asset rail is a Soroban token controlled by the verifier contract.
+That makes the MVP functional and testable end to end, but it is not yet the
+classic Stellar `AUTH_REQUIRED` plus claimable balance distribution rail.
+
+To complete the production rail, replace the custom VFLY token deployment with
+a Stellar Asset Contract for the issued asset, then wire issuer-side
+authorization, clawback policy, trustline creation, and claimable balance
+funding around the verified wallet state.

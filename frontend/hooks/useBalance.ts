@@ -11,6 +11,7 @@ import {
 } from "@stellar/stellar-sdk";
 import { horizonServer, rpcServer } from "@/lib/stellar";
 import { NETWORK_PASSPHRASE, TOKEN_CONTRACT } from "@/constants";
+import { getDemoClaim } from "@/lib/demoLedger";
 
 interface BalanceState {
   xlm: string;
@@ -20,7 +21,10 @@ interface BalanceState {
   refetch: () => void;
 }
 
-export function useBalance(publicKey: string | null): BalanceState {
+export function useBalance(
+  publicKey: string | null,
+  demoMode = false
+): BalanceState {
   const [xlm, setXlm] = useState("0");
   const [vfly, setVfly] = useState("0");
   const [loading, setLoading] = useState(false);
@@ -31,6 +35,13 @@ export function useBalance(publicKey: string | null): BalanceState {
     setLoading(true);
     setError(null);
     try {
+      if (demoMode) {
+        const claim = getDemoClaim(publicKey);
+        setXlm("100.0000000");
+        setVfly(claim?.amount ?? "0.0000000");
+        return;
+      }
+
       const account = await horizonServer.loadAccount(publicKey);
       const nativeBal = account.balances.find((b) => b.asset_type === "native");
       setXlm(nativeBal ? nativeBal.balance : "0");
@@ -70,7 +81,7 @@ export function useBalance(publicKey: string | null): BalanceState {
     } finally {
       setLoading(false);
     }
-  }, [publicKey]);
+  }, [demoMode, publicKey]);
 
   useEffect(() => {
     fetchBalances();

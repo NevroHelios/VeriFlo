@@ -10,12 +10,30 @@ import { Horizon } from "@stellar/stellar-sdk";
 import { HORIZON_URL, XLM_FUND_AMOUNT, NETWORK_PASSPHRASE } from "@/constants";
 
 const horizonServer = new Horizon.Server(HORIZON_URL);
+const fundedAt = new Map<string, number>();
+const FUNDING_COOLDOWN_MS = 60 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
   try {
+    if (process.env.ENABLE_TESTNET_FUNDER !== "true") {
+      return NextResponse.json(
+        { error: "Testnet funder disabled" },
+        { status: 403 }
+      );
+    }
+
     const { toPublicKey } = await req.json();
     if (!toPublicKey) {
       return NextResponse.json({ error: "toPublicKey required" }, { status: 400 });
+    }
+    Keypair.fromPublicKey(toPublicKey);
+
+    const previousFunding = fundedAt.get(toPublicKey) ?? 0;
+    if (Date.now() - previousFunding < FUNDING_COOLDOWN_MS) {
+      return NextResponse.json(
+        { error: "Funding cooldown active for this address" },
+        { status: 429 }
+      );
     }
 
     const secret = process.env.ISSUER_SECRET;
@@ -43,6 +61,7 @@ export async function POST(req: NextRequest) {
 
     tx.sign(issuerKeypair);
     const result = await horizonServer.submitTransaction(tx);
+    fundedAt.set(toPublicKey, Date.now());
 
     return NextResponse.json({ hash: result.hash });
   } catch (err) {

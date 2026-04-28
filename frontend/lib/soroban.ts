@@ -9,6 +9,7 @@ import {
 import { signTransaction } from "@stellar/freighter-api";
 import { rpcServer } from "@/lib/stellar";
 import { NETWORK_PASSPHRASE, VERIFIER_CONTRACT } from "@/constants";
+import { recordDemoClaim } from "@/lib/demoLedger";
 
 export async function invokeContract(
   publicKey: string,
@@ -76,8 +77,18 @@ export async function invokeContract(
 export async function submitProof(
   publicKey: string,
   proofBytes: Uint8Array,
-  publicInputs: Uint8Array[]
+  publicInputs: Uint8Array[],
+  proofMode: "real" | "demo" = "real"
 ): Promise<string> {
+  if (!VERIFIER_CONTRACT) {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    return recordDemoClaim(publicKey, publicInputs[0], proofBytes, publicInputs);
+  }
+
+  if (proofMode !== "real") {
+    throw new Error("Demo proof cannot be submitted to a deployed verifier contract.");
+  }
+
   const proofScVal = xdr.ScVal.scvBytes(Buffer.from(proofBytes));
 
   const pubInputsScVal = xdr.ScVal.scvVec(

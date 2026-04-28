@@ -25,6 +25,16 @@ describe("parseError", () => {
     expect(err.type).toBe("PROOF_REJECTED");
   });
 
+  it("maps RecipientMismatch to PROOF_REJECTED", () => {
+    const err = parseError(new Error("RecipientMismatch"));
+    expect(err.type).toBe("PROOF_REJECTED");
+  });
+
+  it("maps missing real ZK proof to ZK_ASSETS_MISSING", () => {
+    const err = parseError(new Error("Real ZK proof unavailable"));
+    expect(err.type).toBe("ZK_ASSETS_MISSING");
+  });
+
   it("maps 404 to INSUFFICIENT_XLM", () => {
     const err = parseError(new Error("404 not found"));
     expect(err.type).toBe("INSUFFICIENT_XLM");

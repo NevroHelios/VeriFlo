@@ -1,7 +1,7 @@
 {
   "name": "veriflo",
   "version": "1.0.0",
-  "description": "Privacy-preserving KYC on Stellar Testnet. Users submit a ZK proof (mocked for prototype); on-chain verification mints VFLY tokens and authorizes the wallet — no backend, no centralized database.",
+  "description": "Privacy-preserving KYC on Stellar Testnet. Users submit wallet-bound ZK proofs; on-chain verification authorizes and releases VFLY without issuer-held identity data.",
   "main": "index.js",
   "directories": {
     "doc": "docs"

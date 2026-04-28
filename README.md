@@ -1,94 +1,82 @@
 # VeriFlo
 
-Privacy-preserving KYC on Stellar Testnet. Users submit a ZK proof (mocked for prototype); on-chain verification mints VFLY tokens and authorizes the wallet — no backend, no centralized database.
+Compliant asset distribution on Stellar with reusable zero-knowledge
+eligibility credentials.
 
-## Live Demo | Contract Addresses (Testnet)
+VeriFlo lets an issuer verify eligibility without collecting user identity
+documents. A KYC provider issues a portable credential, the user generates a
+wallet-bound Groth16 proof, and Soroban contracts enforce nullifier replay
+protection plus VFLY authorization.
 
-| Contract | ID |
-|---|---|
-| VFLY Token | `CDCP63USO2KBCS5CZASLEWM3YBEWPSTAC245A4SSHE7WRTEE3O42Q4KW` |
-| VeriFlo Verifier | `CC4EQWLRNOWEXPAS24XGS23HXKZEKTP2XNDNMTMY4PWPDXNTWXTYFWC6` |
+## MVP Surface
 
-Stellar Expert: [Token](https://stellar.expert/explorer/testnet/contract/CDCP63USO2KBCS5CZASLEWM3YBEWPSTAC245A4SSHE7WRTEE3O42Q4KW) · [Verifier](https://stellar.expert/explorer/testnet/contract/CC4EQWLRNOWEXPAS24XGS23HXKZEKTP2XNDNMTMY4PWPDXNTWXTYFWC6)
+- **Investor:** connect Freighter or the demo wallet, load a credential,
+  generate a wallet-bound proof, submit it, and receive VFLY.
+- **Issuer:** publish policy inputs, stage a demo distribution reserve, and
+  generate a browser-local demo credential.
+- **Audit:** inspect root registration, reserve staging, proof verification,
+  nullifier use, and release events without exposing identity fields.
 
-## Architecture
+## Current Architecture
 
+```text
+KYC credential
+  -> snarkjs Groth16 proof
+KYC verifier contract
+  -> Protocol 25 BN254 pairing check
+VeriFlo verifier contract
+  -> trusted root + nullifier + wallet binding
+VFLY token
+  -> verifier-controlled authorization and mint
 ```
-User Wallet (Freighter)
-    │
-    ▼
-VeriFlo Verifier Contract
-    ├── nullifier check (replay prevention)
-    ├── mock ZK proof check (bytes > 32)
-    │
-    ▼  (cross-contract call)
-VFLY Token Contract
-    ├── set_authorized(user, true)
-    └── mint(user, 100 VFLY)
-```
 
-The verifier contract is the admin of the VFLY token contract. All authorization and minting happens in one Soroban transaction.
-
-## Requirements Coverage
-
-| Level | Requirement | Status | Notes |
-|---|---|---|---|
-| L1 | XLM send | ✅ | Issuer Panel sends XLM to fund user wallets |
-| L1 | Wallet connect | ✅ | Freighter v5 |
-| L1 | Balance display | ✅ | XLM + VFLY shown in header |
-| L1 | Transaction hash | ✅ | Stellar Expert link after every tx |
-| L2 | Custom token | ✅ | VFLY — SEP-41 Soroban token |
-| L2 | Inter-contract call | ✅ | Verifier → Token (set_authorized + mint) |
-| L2 | 3 error types | ✅ | WALLET_REJECTED, INSUFFICIENT_XLM, PROOF_REJECTED |
-| L2 | Auth-gated transfer | ✅ | token.transfer() panics if not authorized |
-| Onboarding | Google Form | ✅ | [Form link](https://forms.gle/placeholder) |
-| Onboarding | Feedback iteration | ✅ | See FEEDBACK.md |
-
-## Honest Disclosures
-
-**ZK verification is mocked.** The contract checks `proof.len() > 32` and stores a SHA-256 nullifier to prevent replay. Real ZK circuit design: [docs/zk-architecture.md](docs/zk-architecture.md).
-
-**Token authorization model.** VFLY is a custom Soroban token — the verifier contract is its admin and gates mint + set_authorized. A production upgrade would wrap a classic Stellar asset with `AUTH_REQUIRED` for protocol-level enforcement.
+The current MVP uses a Soroban token controlled by the verifier contract. The
+classic Stellar `AUTH_REQUIRED` plus claimable balance rail remains the next
+production integration step.
 
 ## Local Setup
 
 ```bash
-# Install deps
-cd frontend && npm install
-
-# Set env
-cp .env.local.example .env.local
-# Fill in NEXT_PUBLIC_TOKEN_CONTRACT, NEXT_PUBLIC_VERIFIER_CONTRACT, ISSUER_SECRET
-
-# Run dev server
+cd frontend
+npm install
 npm run dev
 ```
 
-## Tests
+Open `http://localhost:3000`.
+
+`npm run dev` copies the circuit WASM and zkey into `frontend/public/circuits`
+before starting Next.js.
+
+## Testnet Environment
+
+Create `frontend/.env.local`:
 
 ```bash
-# Frontend
-cd frontend && npm test   # 9 vitest tests
+NEXT_PUBLIC_TOKEN_CONTRACT=C...
+NEXT_PUBLIC_KYC_VERIFIER_CONTRACT=C...
+NEXT_PUBLIC_VERIFIER_CONTRACT=C...
 
-# Contracts
-cd contracts/vfly-token && cargo test      # 5 tests
-cd contracts/veriflo-verifier && cargo test # 5 tests
+# Optional server-only faucet. Keep disabled unless explicitly needed.
+ENABLE_TESTNET_FUNDER=false
+# ISSUER_SECRET=S...
 ```
+
+Never prefix secrets with `NEXT_PUBLIC_`, and never commit `.env.local`.
 
 ## Deploy Contracts
 
 ```bash
-export PATH="$HOME/.cargo/bin:$PATH"
-bash scripts/deploy.sh
+SOURCE=deployer TRUSTED_ROOT_HEX=<32-byte-root-hex> ./scripts/deploy.sh
 ```
 
-## User Onboarding
+If `TRUSTED_ROOT_HEX` is omitted, deployment succeeds but no credential root is
+trusted until `add_trusted_root` is called.
 
-- Google Form: [link](https://forms.gle/placeholder)
-- Responses Sheet: [link](https://docs.google.com/spreadsheets/placeholder)
+## Verification
 
-## Improvements Based on Feedback
-
-See [FEEDBACK.md](FEEDBACK.md).
-
-
+```bash
+cargo test
+cd frontend
+npm test
+npm run build
+```

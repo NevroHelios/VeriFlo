@@ -3,6 +3,12 @@
 import { useState } from "react";
 import TransactionStatus from "@/components/TransactionStatus";
 import { parseError, VerifloError } from "@/lib/errors";
+import {
+  createDemoCredential,
+  saveCredential,
+  type Credential,
+} from "@/lib/credential";
+import { recordAuditEvent } from "@/lib/demoLedger";
 
 interface FundState {
   status: "idle" | "pending" | "success" | "error";
@@ -19,65 +25,88 @@ interface CredentialForm {
 
 const INITIAL_FORM: CredentialForm = {
   recipientAddress: "",
-  jurisdiction: "91",
-  accreditation: "1",
+  jurisdiction: "840",
+  accreditation: "2",
   expiry: "2028-12-31",
 };
 
-function randomHex(bytes: number): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+function fieldId(key: keyof CredentialForm) {
+  return `issuer-${key}`;
 }
 
-// Placeholder Merkle root — matches the trusted root registered on testnet
-const DEMO_MERKLE_ROOT = "aa".repeat(32);
+async function makeLocalHash(input: string): Promise<string> {
+  const payload = new TextEncoder().encode(`${input}:${Date.now()}`);
 
-function buildCredentialJson(form: CredentialForm, nonce: string) {
-  const expiry = Math.floor(new Date(form.expiry).getTime() / 1000);
-  return {
-    jurisdiction: parseInt(form.jurisdiction),
-    accreditation: parseInt(form.accreditation),
-    expiry,
-    issuer_id: "VERIFLO_DEMO_ISSUER_001",
-    nonce,
-    merkle_root: DEMO_MERKLE_ROOT,
-    merkle_siblings: Array(20).fill("00".repeat(32)),
-    merkle_path: Array(20).fill(0),
-  };
+  if (crypto.subtle) {
+    const digest = await crypto.subtle.digest("SHA-256", payload);
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  return Array.from(payload)
+    .slice(0, 32)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+    .padEnd(64, "0");
+}
+
+function buildCredential(form: CredentialForm): Credential {
+  return createDemoCredential({
+    jurisdiction: Number.parseInt(form.jurisdiction, 10),
+    accreditation: Number.parseInt(form.accreditation, 10),
+    expiry: Math.floor(new Date(form.expiry).getTime() / 1000),
+  });
 }
 
 export default function IssuerPanel() {
-  const [fund, setFund] = useState<FundState>({ status: "idle", hash: null, error: null });
+  const [fund, setFund] = useState<FundState>({
+    status: "idle",
+    hash: null,
+    error: null,
+  });
   const [form, setForm] = useState<CredentialForm>(INITIAL_FORM);
-  const [credJson, setCredJson] = useState<string | null>(null);
+  const [credential, setCredential] = useState<Credential | null>(null);
+  const [saved, setSaved] = useState(false);
 
   async function handleFund() {
-    if (!form.recipientAddress.trim()) return;
     setFund({ status: "pending", hash: null, error: null });
+
     try {
-      const res = await fetch("/api/fund", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toPublicKey: form.recipientAddress.trim() }),
+      await new Promise((resolve) => setTimeout(resolve, 650));
+      const hash = await makeLocalHash(
+        `demo-reserve:${form.recipientAddress || "unassigned"}`
+      );
+
+      recordAuditEvent({
+        label: "Demo reserve staged",
+        detail: "Issuer staged 1,000 VFLY for post-verification release.",
+        hash,
+        tone: "green",
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Fund request failed");
-      setFund({ status: "success", hash: data.hash, error: null });
+      setFund({ status: "success", hash, error: null });
     } catch (err) {
       setFund({ status: "error", hash: null, error: parseError(err) });
     }
   }
 
   function handleGenerateCredential() {
-    const nonce = randomHex(16);
-    const cred = buildCredentialJson(form, nonce);
-    setCredJson(JSON.stringify(cred, null, 2));
+    const nextCredential = buildCredential(form);
+    setCredential(nextCredential);
+    setSaved(false);
+    recordAuditEvent({
+      label: "Credential issued",
+      detail: `Jurisdiction ${nextCredential.jurisdiction}, tier ${nextCredential.accreditation}, no personal fields stored.`,
+      tone: "purple",
+    });
   }
 
   function handleDownload() {
-    if (!credJson) return;
-    const blob = new Blob([credJson], { type: "application/json" });
+    if (!credential) return;
+
+    const blob = new Blob([JSON.stringify(credential, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -86,102 +115,136 @@ export default function IssuerPanel() {
     URL.revokeObjectURL(url);
   }
 
+  function handleSaveToWallet() {
+    if (!credential) return;
+    saveCredential(credential);
+    setSaved(true);
+  }
+
   const field = (key: keyof CredentialForm) => ({
+    id: fieldId(key),
     value: form[key],
     onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm((f) => ({ ...f, [key]: e.target.value })),
+      setForm((current) => ({ ...current, [key]: e.target.value })),
   });
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-lg font-semibold text-white mb-1">Issuer Dashboard</h2>
-        <p className="text-slate-400 text-sm">
-          Fund a wallet with XLM for gas, then issue a KYC credential the user imports
-          in the User tab.
+    <div className="panel-stack">
+      <div className="section-heading">
+        <span className="eyebrow">Issuer console</span>
+        <h2>Publish policy, stage reserve, issue credential</h2>
+        <p>
+          The issuer controls eligibility and authorization while the user keeps
+          identity material outside the ledger.
         </p>
       </div>
 
-      {/* Recipient address — shared across both actions */}
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-slate-400 font-medium">User wallet address (G…)</label>
-        <input
-          type="text"
-          placeholder="GABCDEF..."
-          className="px-3 py-2 rounded-lg bg-slate-700 text-white text-sm font-mono border border-slate-600 focus:border-indigo-500 focus:outline-none"
-          {...field("recipientAddress")}
-        />
+      <div className="issuer-grid">
+        <section className="issuer-card">
+          <div className="panel-heading">
+            <span className="eyebrow">Distribution policy</span>
+            <span className="chain-badge stellar">Verifier gated</span>
+          </div>
+
+          <div className="form-grid">
+            <label className="field full" htmlFor={fieldId("recipientAddress")}>
+              <span>User wallet</span>
+              <input
+                type="text"
+                placeholder="G..."
+                autoComplete="off"
+                className="mono"
+                {...field("recipientAddress")}
+              />
+            </label>
+
+            <label className="field" htmlFor={fieldId("jurisdiction")}>
+              <span>Jurisdiction</span>
+              <input type="number" min="0" {...field("jurisdiction")} />
+            </label>
+
+            <label className="field" htmlFor={fieldId("accreditation")}>
+              <span>Tier</span>
+              <input type="number" min="0" max="3" {...field("accreditation")} />
+            </label>
+
+            <label className="field" htmlFor={fieldId("expiry")}>
+              <span>Expiry</span>
+              <input type="date" {...field("expiry")} />
+            </label>
+          </div>
+        </section>
+
+        <section className="issuer-card">
+          <div className="panel-heading">
+            <span className="eyebrow">Distribution reserve</span>
+            <span className="status-pill">
+              <span className="live-dot" />
+              staged asset
+            </span>
+          </div>
+
+          <div className="asset-breakdown">
+            <div>
+              <span>Asset</span>
+              <strong>VFLY</strong>
+            </div>
+            <div>
+              <span>Amount</span>
+              <strong>1,000</strong>
+            </div>
+            <div>
+              <span>Claim rule</span>
+              <strong>authorized wallet</strong>
+            </div>
+          </div>
+
+          <button
+            onClick={handleFund}
+            disabled={fund.status === "pending"}
+            className="button button-primary button-wide"
+          >
+            {fund.status === "pending" ? "Staging..." : "Stage demo reserve"}
+          </button>
+
+          <TransactionStatus
+            hash={fund.hash}
+            status={fund.status}
+            error={fund.error}
+            explorer={false}
+            successLabel="Demo reserve staged"
+          />
+        </section>
       </div>
 
-      {/* Step 1: Fund XLM */}
-      <div className="flex flex-col gap-3 border border-slate-700 rounded-lg p-4">
-        <p className="text-sm font-medium text-slate-200">Step 1 — Send XLM for gas</p>
-        <button
-          onClick={handleFund}
-          disabled={fund.status === "pending" || !form.recipientAddress.trim()}
-          className="px-4 py-2 rounded-lg bg-slate-600 text-white text-sm font-semibold hover:bg-slate-500 disabled:opacity-50 transition-colors self-start"
-        >
-          {fund.status === "pending" ? "Sending…" : "Fund 10 XLM"}
-        </button>
-        <TransactionStatus hash={fund.hash} status={fund.status} error={fund.error} />
-      </div>
-
-      {/* Step 2: Issue credential */}
-      <div className="flex flex-col gap-3 border border-slate-700 rounded-lg p-4">
-        <p className="text-sm font-medium text-slate-200">Step 2 — Issue KYC credential</p>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400">Jurisdiction</label>
-            <input
-              type="number"
-              className="px-2 py-1.5 rounded bg-slate-700 text-white text-sm border border-slate-600 focus:border-indigo-500 focus:outline-none"
-              {...field("jurisdiction")}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400">Accreditation (0-2)</label>
-            <input
-              type="number"
-              min="0"
-              max="2"
-              className="px-2 py-1.5 rounded bg-slate-700 text-white text-sm border border-slate-600 focus:border-indigo-500 focus:outline-none"
-              {...field("accreditation")}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400">Expiry</label>
-            <input
-              type="date"
-              className="px-2 py-1.5 rounded bg-slate-700 text-white text-sm border border-slate-600 focus:border-indigo-500 focus:outline-none"
-              {...field("expiry")}
-            />
-          </div>
+      <section className="issuer-card">
+        <div className="panel-heading">
+          <span className="eyebrow">Portable credential</span>
+          <button onClick={handleGenerateCredential} className="button button-primary">
+            Generate demo credential
+          </button>
         </div>
 
-        <button
-          onClick={handleGenerateCredential}
-          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 transition-colors self-start"
-        >
-          Generate credential
-        </button>
-
-        {credJson && (
-          <div className="flex flex-col gap-2">
-            <pre className="text-xs font-mono bg-slate-900 rounded p-3 overflow-x-auto text-slate-300 max-h-40">
-              {credJson}
-            </pre>
-            <button
-              onClick={handleDownload}
-              className="px-4 py-2 rounded-lg bg-green-700 text-white text-sm font-semibold hover:bg-green-600 transition-colors self-start"
-            >
-              Download credential.json
-            </button>
-            <p className="text-xs text-slate-400">
-              Send this file to the user. They import it in the <strong className="text-slate-300">User</strong> tab.
-            </p>
+        {credential ? (
+          <div className="credential-output">
+            <pre>{JSON.stringify(credential, null, 2)}</pre>
+            <div className="button-row">
+              <button onClick={handleSaveToWallet} className="button button-secondary">
+                Save to wallet
+              </button>
+              <button onClick={handleDownload} className="button button-secondary">
+                Download JSON
+              </button>
+            </div>
+            {saved && <p className="notice green">Credential saved in this browser.</p>}
           </div>
+        ) : (
+          <p className="empty-copy">
+            Eligibility data is encoded into a reusable proof credential. The
+            issuer never stores user documents in this app.
+          </p>
         )}
-      </div>
+      </section>
     </div>
   );
 }

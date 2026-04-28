@@ -2,100 +2,224 @@
 
 import { useState } from "react";
 import { useWallet } from "@/hooks/useWallet";
-import { useBalance } from "@/hooks/useBalance";
 import WalletButton from "@/components/WalletButton";
 import BalanceDisplay from "@/components/BalanceDisplay";
 import IssuerPanel from "@/components/IssuerPanel";
 import UserClaimPanel from "@/components/UserClaimPanel";
+import { getAuditEvents } from "@/lib/demoLedger";
+import {
+  KYC_VERIFIER_CONTRACT,
+  TOKEN_CONTRACT,
+  VERIFIER_CONTRACT,
+} from "@/constants";
 
-type Tab = "user" | "issuer";
+type Tab = "claim" | "issuer" | "audit";
+
+const NAV_ITEMS: Array<{ id: Tab; label: string }> = [
+  { id: "claim", label: "Investor" },
+  { id: "issuer", label: "Issuer" },
+  { id: "audit", label: "Audit" },
+];
+
+const STATS = [
+  { value: "0", label: "identity fields stored" },
+  { value: "3", label: "protocol gates" },
+  { value: "<5s", label: "target settlement" },
+  { value: "1", label: "atomic claim" },
+];
+
+function ContractCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="contract-card">
+      <span className="eyebrow">{label}</span>
+      <span className="hash-text">{value || "local mvp mode"}</span>
+    </div>
+  );
+}
 
 export default function AppShell() {
-  const [tab, setTab] = useState<Tab>("user");
+  const [tab, setTab] = useState<Tab>("claim");
+  const [ledgerVersion, setLedgerVersion] = useState(0);
   const wallet = useWallet();
-  const balance = useBalance(wallet.publicKey);
+  const auditEvents = getAuditEvents();
+
+  function handleClaimSuccess() {
+    setLedgerVersion((version) => version + 1);
+  }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="border-b border-slate-800 sticky top-0 bg-slate-900/90 backdrop-blur z-10">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-          <div className="flex-1">
-            <h1 className="text-xl font-bold tracking-tight">
-              <span className="text-indigo-400">Veri</span>Flo
-            </h1>
-            <p className="text-xs text-slate-400">ZK Identity · Soroban · Testnet</p>
+    <div className="app-frame">
+      <header className="topbar">
+        <div className="topbar-inner">
+          <div className="brand-lockup">
+            <span className="brand-mark">VF</span>
+            <div>
+              <p className="brand-name">VeriFlo</p>
+              <p className="brand-subtitle">Compliant asset distribution on Stellar</p>
+            </div>
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-            {wallet.connected && <BalanceDisplay publicKey={wallet.publicKey} />}
+
+          <nav className="nav-pills" aria-label="Primary">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setTab(item.id)}
+                className={tab === item.id ? "nav-pill active" : "nav-pill"}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="topbar-actions">
+            {wallet.connected && (
+              <BalanceDisplay
+                publicKey={wallet.publicKey}
+                demo={wallet.demo}
+                refreshKey={ledgerVersion}
+              />
+            )}
             <WalletButton
               publicKey={wallet.publicKey}
               connected={wallet.connected}
               connecting={wallet.connecting}
+              demo={wallet.demo}
               error={wallet.error}
               connect={wallet.connect}
+              connectDemo={wallet.connectDemo}
               disconnect={wallet.disconnect}
             />
           </div>
         </div>
       </header>
 
-      <main className="flex-1 max-w-2xl mx-auto px-4 py-8 w-full">
-        {/* Tab selector */}
-        <div className="flex rounded-lg bg-slate-800 border border-slate-700 p-1 mb-6">
-          <button
-            onClick={() => setTab("user")}
-            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-              tab === "user"
-                ? "bg-indigo-600 text-white"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            User — Claim VFLY
-          </button>
-          <button
-            onClick={() => setTab("issuer")}
-            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-              tab === "issuer"
-                ? "bg-indigo-600 text-white"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Issuer — Fund &amp; Issue
-          </button>
-        </div>
-
-        {/* Panel */}
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-          {tab === "user" ? (
-            <UserClaimPanel
-              publicKey={wallet.publicKey}
-              onSuccess={balance.refetch}
-            />
-          ) : (
-            <IssuerPanel />
-          )}
-        </div>
-
-        {/* Contract addresses */}
-        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-400">
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
-            <p className="font-semibold text-slate-300 mb-1 text-xs">VFLY Token</p>
-            <p className="font-mono text-xs break-all opacity-70">
-              {process.env.NEXT_PUBLIC_TOKEN_CONTRACT || "not set"}
+      <main className="page-shell">
+        <section className="hero-grid" aria-labelledby="hero-title">
+          <div className="hero-copy">
+            <div className="badge-row">
+              <span className="chain-badge stellar">Stellar Protocol 25</span>
+              <span className="chain-badge ethereum">No identity custody</span>
+            </div>
+            <h1 id="hero-title">VeriFlo</h1>
+            <p className="hero-text">
+              ZK credentials let issuers authorize regulated asset access
+              without collecting passports, IDs, or counterparty databases.
             </p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
-            <p className="font-semibold text-slate-300 mb-1 text-xs">Verifier</p>
-            <p className="font-mono text-xs break-all opacity-70">
-              {process.env.NEXT_PUBLIC_VERIFIER_CONTRACT || "not set"}
-            </p>
+
+          <aside className="protocol-panel" aria-label="Protocol flow">
+            <div className="panel-heading">
+              <span className="eyebrow">Live flow</span>
+              <span className="status-pill"><span className="live-dot" />MVP ready</span>
+            </div>
+            <ol className="flow-list">
+              <li>
+                <span>01</span>
+                <p>KYC provider issues reusable ZK credential.</p>
+              </li>
+              <li>
+                <span>02</span>
+                <p>Soroban verifier checks proof and nullifier.</p>
+              </li>
+              <li>
+                <span>03</span>
+                <p>Verifier authorizes the wallet and releases VFLY.</p>
+              </li>
+            </ol>
+          </aside>
+        </section>
+
+        <section className="stats-grid" aria-label="VeriFlo metrics">
+          {STATS.map((stat) => (
+            <div className="stat-card" key={stat.label}>
+              <strong>{stat.value}</strong>
+              <span>{stat.label}</span>
+            </div>
+          ))}
+        </section>
+
+        <section className="workspace-grid">
+          <div className="workspace-main">
+            {tab === "claim" && (
+              <UserClaimPanel
+                publicKey={wallet.publicKey}
+                walletDemo={wallet.demo}
+                onSuccess={handleClaimSuccess}
+              />
+            )}
+            {tab === "issuer" && <IssuerPanel />}
+            {tab === "audit" && (
+              <div className="panel-stack">
+                <div className="section-heading">
+                  <span className="eyebrow">Audit stream</span>
+                  <h2>Compliance events without user identity data</h2>
+                  <p>
+                    Every event is keyed by protocol state: credential root,
+                    nullifier, wallet authorization, or release hash.
+                  </p>
+                </div>
+
+                <div className="audit-list">
+                  {auditEvents.map((event) => (
+                    <article className="audit-card" key={event.id}>
+                      <span className={`audit-dot ${event.tone}`} />
+                      <div>
+                        <div className="audit-title-row">
+                          <h3>{event.label}</h3>
+                          <time>
+                            {new Date(event.timestamp).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </time>
+                        </div>
+                        <p>{event.detail}</p>
+                        {event.hash && (
+                          <span className="hash-text">{event.hash}</span>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+
+          <aside className="workspace-side" aria-label="Protocol state">
+            <div className="side-section">
+              <span className="eyebrow">Asset rail</span>
+              <h2>Verifier-admin VFLY</h2>
+              <p>
+                The MVP uses a Soroban token with verifier-controlled
+                authorization and minting.
+              </p>
+              <div className="mini-grid">
+                <span>Groth16 KYC</span>
+                <span>Nullifier lock</span>
+                <span>set_authorized</span>
+              </div>
+            </div>
+
+            <div className="side-section">
+              <span className="eyebrow">Contracts</span>
+              <ContractCard label="Token contract" value={TOKEN_CONTRACT} />
+              <ContractCard label="KYC verifier" value={KYC_VERIFIER_CONTRACT} />
+              <ContractCard label="Verifier contract" value={VERIFIER_CONTRACT} />
+            </div>
+
+            <div className="side-section compact">
+              <span className="eyebrow">Privacy invariant</span>
+              <p className="big-statement">No name. No ID number. No document upload.</p>
+            </div>
+          </aside>
+        </section>
       </main>
-
-      <footer className="border-t border-slate-800 py-4 text-center text-xs text-slate-500">
-        VeriFlo · Stellar Testnet · ZK-powered KYC
-      </footer>
     </div>
   );
 }

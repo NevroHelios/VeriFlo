@@ -9,16 +9,18 @@ const TYPE_LABELS: Record<VerifloError["type"], string> = {
   PROOF_REJECTED: "Proof Rejected",
   UNTRUSTED_ROOT: "Untrusted Credential",
   ALREADY_AUTHORIZED: "Already Authorized",
+  ZK_ASSETS_MISSING: "ZK Proof Unavailable",
   CONTRACT_ERROR: "Contract Error",
 };
 
 const TYPE_COLORS: Record<VerifloError["type"], string> = {
-  WALLET_REJECTED: "border-yellow-500 bg-yellow-950 text-yellow-200",
-  INSUFFICIENT_XLM: "border-orange-500 bg-orange-950 text-orange-200",
-  PROOF_REJECTED: "border-red-500 bg-red-950 text-red-200",
-  UNTRUSTED_ROOT: "border-red-500 bg-red-950 text-red-200",
-  ALREADY_AUTHORIZED: "border-blue-500 bg-blue-950 text-blue-200",
-  CONTRACT_ERROR: "border-red-500 bg-red-950 text-red-200",
+  WALLET_REJECTED: "warning",
+  INSUFFICIENT_XLM: "warning",
+  PROOF_REJECTED: "danger",
+  UNTRUSTED_ROOT: "danger",
+  ALREADY_AUTHORIZED: "info",
+  ZK_ASSETS_MISSING: "warning",
+  CONTRACT_ERROR: "danger",
 };
 
 interface Props {
@@ -30,20 +32,20 @@ export default function ErrorBanner({ error }: Props) {
   if (dismissed) return null;
 
   return (
-    <div
-      className={`border rounded-lg p-4 flex flex-col gap-1 ${TYPE_COLORS[error.type]}`}
-    >
-      <div className="flex justify-between items-start">
-        <span className="font-semibold text-sm">{TYPE_LABELS[error.type]}</span>
+    <div className={`error-banner ${TYPE_COLORS[error.type]}`}>
+      <div className="error-title-row">
+        <span>{TYPE_LABELS[error.type]}</span>
         <button
           onClick={() => setDismissed(true)}
-          className="text-xs opacity-60 hover:opacity-100 ml-4"
+          className="icon-button"
+          aria-label="Dismiss error"
+          title="Dismiss"
         >
-          ✕
+          X
         </button>
       </div>
-      <p className="text-xs opacity-80">{error.message}</p>
-      <p className="text-xs font-medium mt-1">{error.recovery}</p>
+      <p>{error.message}</p>
+      <strong>{error.recovery}</strong>
     </div>
   );
 }

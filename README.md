@@ -157,7 +157,7 @@ All four contracts are deployed and initialized on testnet. A Merkle root is pre
 
 ### Successful testnet transaction
 
-> *[Screenshot — to be added]*
+> ![Successful testnet transaction](assets/testnet-transaction.png)
 
 ### Mobile responsive view
 

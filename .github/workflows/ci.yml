@@ -38,6 +38,10 @@ jobs:
         run: cargo install stellar-cli --locked
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all -- -D warnings
+      - name: Build contract WASMs
+        run: |
+          cargo build --target wasm32v1-none --release -p vfly-token
+          cargo build --target wasm32v1-none --release -p kyc-verifier
       - name: Test vfly-token
         working-directory: contracts/vfly-token
         run: cargo test

@@ -42,3 +42,6 @@ jobs:
       - name: Test veriflo-verifier
         working-directory: contracts/veriflo-verifier
         run: cargo test
+      - name: Test credential-registry
+        working-directory: contracts/credential-registry
+        run: cargo test

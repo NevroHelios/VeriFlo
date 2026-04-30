@@ -12,6 +12,7 @@ echo "==> Building contracts..."
 (cd contracts/vfly-token && stellar contract build)
 (cd contracts/kyc-verifier && stellar contract build)
 (cd contracts/veriflo-verifier && stellar contract build)
+(cd contracts/credential-registry && stellar contract build)
 
 echo "==> Deploying vfly-token..."
 TOKEN_ID=$(stellar contract deploy \
@@ -33,6 +34,13 @@ VERIFIER_ID=$(stellar contract deploy \
   --source "$SOURCE" \
   --network "$NETWORK")
 echo "VERIFIER_ID: $VERIFIER_ID"
+
+echo "==> Deploying credential-registry..."
+REGISTRY_ID=$(stellar contract deploy \
+  --wasm target/wasm32v1-none/release/credential_registry.wasm \
+  --source "$SOURCE" \
+  --network "$NETWORK")
+echo "REGISTRY_ID: $REGISTRY_ID"
 
 echo "==> Initializing vfly-token (admin = verifier)..."
 stellar contract invoke \
@@ -56,6 +64,14 @@ stellar contract invoke \
   --kyc_verifier "$KYC_VERIFIER_ID" \
   --mint_amount "$MINT_AMOUNT"
 
+echo "==> Initializing credential-registry..."
+stellar contract invoke \
+  --id "$REGISTRY_ID" \
+  --source "$SOURCE" \
+  --network "$NETWORK" \
+  -- initialize \
+  --admin "$SOURCE"
+
 if [[ -n "$TRUSTED_ROOT_HEX" ]]; then
   echo "==> Registering trusted credential root..."
   stellar contract invoke \
@@ -75,6 +91,7 @@ echo "==> Add the following to frontend/.env.local:"
 echo "NEXT_PUBLIC_TOKEN_CONTRACT=$TOKEN_ID"
 echo "NEXT_PUBLIC_KYC_VERIFIER_CONTRACT=$KYC_VERIFIER_ID"
 echo "NEXT_PUBLIC_VERIFIER_CONTRACT=$VERIFIER_ID"
+echo "NEXT_PUBLIC_REGISTRY_CONTRACT=$REGISTRY_ID"
 echo ""
 echo "# Optional server-only demo funder. Keep disabled unless you need it."
 echo "ENABLE_TESTNET_FUNDER=false"

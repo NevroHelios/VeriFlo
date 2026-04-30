@@ -25,6 +25,9 @@ pub enum TokenError {
 #[contract]
 pub struct VflyToken;
 
+const BUMP_AMOUNT: u32 = 518_400;
+const BUMP_THRESHOLD: u32 = 100_000;
+
 #[contractimpl]
 impl VflyToken {
     pub fn initialize(
@@ -45,6 +48,7 @@ impl VflyToken {
     }
 
     pub fn mint(env: Env, to: Address, amount: i128) -> Result<(), TokenError> {
+        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
         if amount < 0 {
             return Err(TokenError::NegativeAmount);
         }
@@ -57,16 +61,23 @@ impl VflyToken {
             .unwrap_or(0);
         env.storage()
             .persistent()
-            .set(&DataKey::Balance(to), &(balance + amount));
+            .set(&DataKey::Balance(to.clone()), &(balance + amount));
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Balance(to), BUMP_THRESHOLD, BUMP_AMOUNT);
         Ok(())
     }
 
     pub fn set_authorized(env: Env, id: Address, authorize: bool) -> Result<(), TokenError> {
+        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
         let admin = Self::get_admin(&env)?;
         admin.require_auth();
         env.storage()
             .persistent()
-            .set(&DataKey::Authorized(id), &authorize);
+            .set(&DataKey::Authorized(id.clone()), &authorize);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Authorized(id), BUMP_THRESHOLD, BUMP_AMOUNT);
         Ok(())
     }
 
@@ -86,28 +97,41 @@ impl VflyToken {
 
     pub fn transfer(env: Env, from: Address, to: Address, amount: i128) -> Result<(), TokenError> {
         from.require_auth();
-        if !Self::authorized(env.clone(), from.clone()) {
+
+        // Reject negative amounts; zero-amount and self-transfer are no-ops.
+        if amount < 0 {
+            return Err(TokenError::NegativeAmount);
+        }
+        if amount == 0 || from == to {
+            return Ok(());
+        }
+
+        let storage = env.storage().persistent();
+
+        // Inline the auth check to avoid env.clone() and a redundant function call.
+        let authorized: bool = storage
+            .get(&DataKey::Authorized(from.clone()))
+            .unwrap_or(false);
+        if !authorized {
             return Err(TokenError::NotAuthorized);
         }
-        let from_balance: i128 = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Balance(from.clone()))
-            .unwrap_or(0);
+
+        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
+
+        let from_key = DataKey::Balance(from);
+        let to_key = DataKey::Balance(to);
+
+        let from_balance: i128 = storage.get(&from_key).unwrap_or(0);
         if from_balance < amount {
             return Err(TokenError::InsufficientBalance);
         }
-        let to_balance: i128 = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Balance(to.clone()))
-            .unwrap_or(0);
-        env.storage()
-            .persistent()
-            .set(&DataKey::Balance(from), &(from_balance - amount));
-        env.storage()
-            .persistent()
-            .set(&DataKey::Balance(to), &(to_balance + amount));
+        let to_balance: i128 = storage.get(&to_key).unwrap_or(0);
+
+        storage.set(&from_key, &(from_balance - amount));
+        storage.extend_ttl(&from_key, BUMP_THRESHOLD, BUMP_AMOUNT);
+        storage.set(&to_key, &(to_balance + amount));
+        storage.extend_ttl(&to_key, BUMP_THRESHOLD, BUMP_AMOUNT);
+
         Ok(())
     }
 

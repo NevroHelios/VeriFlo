@@ -99,6 +99,20 @@ async function computeNullifier(nonce: string, recipientField: Uint8Array) {
   return bigintToBytes32(BigInt(poseidon.F.toString(hash)));
 }
 
+export async function checkCircuitFiles(): Promise<{ ok: boolean; missing: string[] }> {
+  const files = ["/circuits/kyc_eligibility.wasm", "/circuits/kyc_eligibility.zkey"];
+  const missing: string[] = [];
+  for (const f of files) {
+    try {
+      const r = await fetch(f, { method: "HEAD" });
+      if (!r.ok) missing.push(f);
+    } catch {
+      missing.push(f);
+    }
+  }
+  return { ok: missing.length === 0, missing };
+}
+
 export async function generateProof(
   cred: Credential,
   recipientAddress: string,
@@ -114,6 +128,8 @@ export async function generateProof(
     const zkeyResp = await fetch("/circuits/kyc_eligibility.zkey");
     if (wasmResp.ok && zkeyResp.ok) {
       const nullifier = await computeNullifier(cred.nonce, recipientField);
+      // Public signals order (must match veriflo-verifier contract):
+      // [0] nullifier  [1] merkle_root  [2] min_accreditation  [3] current_time  [4] recipient
       const input = {
         jurisdiction: fieldDecimal(cred.jurisdiction),
         accreditation: fieldDecimal(cred.accreditation),

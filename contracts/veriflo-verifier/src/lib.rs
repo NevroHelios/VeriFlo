@@ -29,6 +29,12 @@ mod kyc_interface {
 
 use kyc_interface::KycVerifierClient;
 
+// Public input order (must match circuit output order):
+// [0] nullifier         — Poseidon(nonce, recipient), replay guard
+// [1] merkle_root       — commitment tree root, checked against trusted registry
+// [2] min_accreditation — minimum tier required (circuit-enforced)
+// [3] current_time      — Unix seconds at proof time (circuit-enforced expiry check)
+// [4] recipient         — sha256(Address.toXDR())[0..31], wallet binding
 const PUBLIC_INPUT_COUNT: u32 = 5;
 
 #[contracttype]
@@ -61,10 +67,15 @@ pub enum VerifierError {
     UntrustedRoot = 7,
     MalformedInputs = 8,
     RecipientMismatch = 9,
+    InvalidTimestamp = 10,
 }
 
 #[contract]
 pub struct VerifloVerifier;
+
+// Ledger TTL constants (~30-day lifetime, extend when less than 1/5 remains).
+const BUMP_AMOUNT: u32 = 518_400;
+const BUMP_THRESHOLD: u32 = 100_000;
 
 #[contractimpl]
 impl VerifloVerifier {
@@ -92,17 +103,20 @@ impl VerifloVerifier {
     }
 
     pub fn add_trusted_root(env: Env, root: BytesN<32>) -> Result<(), VerifierError> {
-        let admin = Self::get_admin(&env)?;
-        admin.require_auth();
+        Self::get_admin(&env)?.require_auth();
+        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
+        let key = DataKey::TrustedRoot(root);
+        // Store unit value — we only ever check existence via `has`.
+        env.storage().persistent().set(&key, &());
         env.storage()
             .persistent()
-            .set(&DataKey::TrustedRoot(root), &true);
+            .extend_ttl(&key, BUMP_THRESHOLD, BUMP_AMOUNT);
         Ok(())
     }
 
     pub fn remove_trusted_root(env: Env, root: BytesN<32>) -> Result<(), VerifierError> {
-        let admin = Self::get_admin(&env)?;
-        admin.require_auth();
+        Self::get_admin(&env)?.require_auth();
+        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
         env.storage()
             .persistent()
             .remove(&DataKey::TrustedRoot(root));
@@ -110,10 +124,7 @@ impl VerifloVerifier {
     }
 
     pub fn is_trusted_root(env: Env, root: BytesN<32>) -> bool {
-        env.storage()
-            .persistent()
-            .get::<DataKey, bool>(&DataKey::TrustedRoot(root))
-            .unwrap_or(false)
+        env.storage().persistent().has(&DataKey::TrustedRoot(root))
     }
 
     /// proof: 256-byte Groth16 proof (A||B||C)
@@ -124,89 +135,87 @@ impl VerifloVerifier {
         pub_inputs: Vec<BytesN<32>>,
         user: Address,
     ) -> Result<bool, VerifierError> {
-        let token_address: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::TokenContract)
-            .ok_or(VerifierError::NotInitialized)?;
-        let kyc_address: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::KycVerifier)
-            .ok_or(VerifierError::NotInitialized)?;
-        let mint_amount: i128 = env
-            .storage()
-            .instance()
-            .get(&DataKey::MintAmount)
-            .ok_or(VerifierError::NotInitialized)?;
-
         user.require_auth();
 
-        if env
-            .storage()
-            .persistent()
-            .get::<DataKey, AuthStatus>(&DataKey::Status(user.clone()))
-            .unwrap_or(AuthStatus::Pending)
-            == AuthStatus::Authorized
-        {
-            return Err(VerifierError::AlreadyAuthorized);
-        }
-
+        // ── Phase 1: cheap stateless checks (fail without touching storage) ────────
         if pub_inputs.len() != PUBLIC_INPUT_COUNT {
             return Err(VerifierError::MalformedInputs);
+        }
+        if proof.len() != 256 {
+            return Err(VerifierError::ProofInvalid);
         }
 
         let nullifier: BytesN<32> = pub_inputs.get(0).unwrap();
         let merkle_root: BytesN<32> = pub_inputs.get(1).unwrap();
+        let current_time_bytes: BytesN<32> = pub_inputs.get(3).unwrap();
         let recipient: BytesN<32> = pub_inputs.get(4).unwrap();
 
-        if !env
-            .storage()
-            .persistent()
-            .get::<DataKey, bool>(&DataKey::TrustedRoot(merkle_root))
-            .unwrap_or(false)
-        {
-            return Err(VerifierError::UntrustedRoot);
-        }
-
-        if env
-            .storage()
-            .persistent()
-            .get::<DataKey, bool>(&DataKey::Nullifier(nullifier.clone()))
-            .unwrap_or(false)
-        {
-            return Err(VerifierError::NullifierReused);
-        }
-
-        if proof.len() != 256 {
-            return Err(VerifierError::ProofInvalid);
+        // current_time is the last 8 bytes of the 32-byte field element.
+        let ct_arr = current_time_bytes.to_array();
+        let current_time_input = u64::from_be_bytes([
+            ct_arr[24], ct_arr[25], ct_arr[26], ct_arr[27],
+            ct_arr[28], ct_arr[29], ct_arr[30], ct_arr[31],
+        ]);
+        let ledger_time = env.ledger().timestamp();
+        if current_time_input.abs_diff(ledger_time) > 300 {
+            return Err(VerifierError::InvalidTimestamp);
         }
 
         if recipient != Self::recipient_field(&env, &user) {
             return Err(VerifierError::RecipientMismatch);
         }
 
+        // ── Phase 2: storage existence checks (`has` avoids deserialization) ───────
+        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
+
+        let storage = env.storage().persistent();
+        let status_key = DataKey::Status(user.clone());
+        if storage.has(&status_key) {
+            return Err(VerifierError::AlreadyAuthorized);
+        }
+        if !storage.has(&DataKey::TrustedRoot(merkle_root)) {
+            return Err(VerifierError::UntrustedRoot);
+        }
+        let nullifier_key = DataKey::Nullifier(nullifier);
+        if storage.has(&nullifier_key) {
+            return Err(VerifierError::NullifierReused);
+        }
+
+        // ── Phase 3: expensive cross-contract pairing check ────────────────────────
+        let kyc_address: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::KycVerifier)
+            .ok_or(VerifierError::NotInitialized)?;
+
         let mut fr_inputs: Vec<Fr> = Vec::new(&env);
         for input in pub_inputs.iter() {
             fr_inputs.push_back(Fr::from_bytes(input));
         }
-
-        let kyc_client = KycVerifierClient::new(&env, &kyc_address);
-        if !kyc_client.verify(&proof, &fr_inputs) {
+        if !KycVerifierClient::new(&env, &kyc_address).verify(&proof, &fr_inputs) {
             return Err(VerifierError::ProofInvalid);
         }
 
-        env.storage()
-            .persistent()
-            .set(&DataKey::Nullifier(nullifier), &true);
+        // ── Phase 4: writes (only reached on success) ──────────────────────────────
+        storage.set(&nullifier_key, &());
+        storage.extend_ttl(&nullifier_key, BUMP_THRESHOLD, BUMP_AMOUNT);
 
+        let token_address: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::TokenContract)
+            .ok_or(VerifierError::NotInitialized)?;
+        let mint_amount: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MintAmount)
+            .ok_or(VerifierError::NotInitialized)?;
         let token_client = VflyTokenClient::new(&env, &token_address);
         token_client.set_authorized(&user, &true);
         token_client.mint(&user, &mint_amount);
 
-        env.storage()
-            .persistent()
-            .set(&DataKey::Status(user), &AuthStatus::Authorized);
+        storage.set(&status_key, &AuthStatus::Authorized);
+        storage.extend_ttl(&status_key, BUMP_THRESHOLD, BUMP_AMOUNT);
 
         Ok(true)
     }
@@ -239,9 +248,7 @@ impl VerifloVerifier {
     fn recipient_field(env: &Env, user: &Address) -> BytesN<32> {
         let digest = env.crypto().sha256(&user.clone().to_xdr(env)).to_array();
         let mut field = [0u8; 32];
-        for i in 0..31 {
-            field[i + 1] = digest[i];
-        }
+        field[1..32].copy_from_slice(&digest[..31]);
         BytesN::from_array(env, &field)
     }
 }

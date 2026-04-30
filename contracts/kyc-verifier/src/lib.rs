@@ -31,6 +31,7 @@ pub struct Groth16Proof {
 const PROOF_SIZE: u32 = 256;
 const G1_SIZE: u32 = 64;
 const G2_SIZE: u32 = 128;
+const PUBLIC_INPUT_COUNT: u32 = 5;
 
 fn parse_proof(_env: &Env, proof_bytes: Bytes) -> Result<Groth16Proof, VerifierError> {
     if proof_bytes.len() != PROOF_SIZE {
@@ -72,7 +73,7 @@ fn load_vk(env: &Env) -> (G1, G2, G2, G2, Vec<G1>) {
     ];
     let mut ic: Vec<G1> = Vec::new(env);
     for arr in ic_arrays.iter() {
-        ic.push_back(G1::from_bytes(BytesN::from_array(env, *arr)));
+        ic.push_back(G1::from_bytes(BytesN::from_array(env, arr)));
     }
 
     (alpha, beta, gamma, delta, ic)
@@ -83,24 +84,23 @@ fn verify_groth16(
     proof: Groth16Proof,
     pub_inputs: Vec<Fr>,
 ) -> Result<bool, VerifierError> {
-    let (alpha, beta, gamma, delta, ic) = load_vk(env);
-    let bn = env.crypto().bn254();
-
-    if pub_inputs.len() + 1 != ic.len() {
+    // Reject malformed input BEFORE loading VK — saves ~7 EC element constructions on bad input.
+    if pub_inputs.len() != PUBLIC_INPUT_COUNT {
         return Err(VerifierError::MalformedPublicInputs);
     }
 
+    let (alpha, beta, gamma, delta, ic) = load_vk(env);
+    let bn = env.crypto().bn254();
+
     // Accumulate: vk_x = IC[0] + sum(IC[i+1] * pub_inputs[i])
     let mut vk_x = ic.get(0).unwrap();
-    for i in 0..pub_inputs.len() {
-        let scalar = pub_inputs.get(i).unwrap();
-        let term = bn.g1_mul(&ic.get(i + 1).unwrap(), &scalar);
+    for (i, scalar) in pub_inputs.iter().enumerate() {
+        let term = bn.g1_mul(&ic.get(i as u32 + 1).unwrap(), &scalar);
         vk_x = bn.g1_add(&vk_x, &term);
     }
 
     // Pairing check: e(-A, B) · e(alpha, beta) · e(vk_x, gamma) · e(C, delta) == 1
-    let neg_a = -proof.a;
-    let g1s = soroban_sdk::vec![env, neg_a, alpha, vk_x, proof.c];
+    let g1s = soroban_sdk::vec![env, -proof.a, alpha, vk_x, proof.c];
     let g2s = soroban_sdk::vec![env, proof.b, beta, gamma, delta];
 
     if bn.pairing_check(g1s, g2s) {

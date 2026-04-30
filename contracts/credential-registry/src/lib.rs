@@ -18,6 +18,9 @@ pub enum RegistryError {
     RootNotFound = 5,
 }
 
+const BUMP_AMOUNT: u32 = 518_400;
+const BUMP_THRESHOLD: u32 = 100_000;
+
 /// On-chain Merkle root registry.
 /// Issuers publish their credential commitment tree roots here.
 /// The veriflo-verifier checks submitted proof's merkle_root against this registry.
@@ -37,21 +40,16 @@ impl CredentialRegistry {
     }
 
     pub fn add_root(env: Env, root: BytesN<32>) -> Result<(), RegistryError> {
-        let admin = Self::get_admin(&env)?;
-        admin.require_auth();
+        Self::get_admin(&env)?.require_auth();
+        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
 
-        if env
-            .storage()
-            .persistent()
-            .get::<DataKey, bool>(&DataKey::Root(root.clone()))
-            .unwrap_or(false)
-        {
+        let storage = env.storage().persistent();
+        let key = DataKey::Root(root.clone());
+        if storage.has(&key) {
             return Err(RegistryError::RootAlreadyExists);
         }
-
-        env.storage()
-            .persistent()
-            .set(&DataKey::Root(root.clone()), &true);
+        storage.set(&key, &());
+        storage.extend_ttl(&key, BUMP_THRESHOLD, BUMP_AMOUNT);
 
         let mut list: Vec<BytesN<32>> = env
             .storage()
@@ -65,21 +63,15 @@ impl CredentialRegistry {
     }
 
     pub fn remove_root(env: Env, root: BytesN<32>) -> Result<(), RegistryError> {
-        let admin = Self::get_admin(&env)?;
-        admin.require_auth();
+        Self::get_admin(&env)?.require_auth();
+        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
 
-        if !env
-            .storage()
-            .persistent()
-            .get::<DataKey, bool>(&DataKey::Root(root.clone()))
-            .unwrap_or(false)
-        {
+        let storage = env.storage().persistent();
+        let key = DataKey::Root(root.clone());
+        if !storage.has(&key) {
             return Err(RegistryError::RootNotFound);
         }
-
-        env.storage()
-            .persistent()
-            .remove(&DataKey::Root(root.clone()));
+        storage.remove(&key);
 
         let list: Vec<BytesN<32>> = env
             .storage()
@@ -98,10 +90,7 @@ impl CredentialRegistry {
     }
 
     pub fn is_trusted(env: Env, root: BytesN<32>) -> bool {
-        env.storage()
-            .persistent()
-            .get::<DataKey, bool>(&DataKey::Root(root))
-            .unwrap_or(false)
+        env.storage().persistent().has(&DataKey::Root(root))
     }
 
     pub fn list_roots(env: Env) -> Vec<BytesN<32>> {

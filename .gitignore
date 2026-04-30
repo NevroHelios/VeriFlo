@@ -20,3 +20,14 @@ Thumbs.db
 
 # Vercel
 .vercel
+
+# Planning docs
+plan.md
+
+# Issuer secrets and generated data — never commit
+scripts/issuer/issuer-keypair.json
+scripts/issuer/credential-*.json
+scripts/issuer/wallet-credential-*.json
+scripts/issuer/merkle-proof-*.json
+scripts/issuer/merkle-tree.json
+scripts/issuer/merkle-root.*

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useWallet } from "@/hooks/useWallet";
+import { checkCircuitFiles } from "@/lib/zk";
 import AppErrorBoundary from "@/components/AppErrorBoundary";
 import WalletButton from "@/components/WalletButton";
 import BalanceDisplay from "@/components/BalanceDisplay";
@@ -56,8 +57,19 @@ function AppContent() {
     loadRuntimeMode()
   );
   const [ledgerVersion, setLedgerVersion] = useState(0);
+  const [circuitWarning, setCircuitWarning] = useState<string | null>(null);
   const wallet = useWallet();
   const auditEvents = getAuditEvents();
+
+  useEffect(() => {
+    checkCircuitFiles().then(({ ok, missing }) => {
+      if (!ok) {
+        setCircuitWarning(
+          `Circuit files not found (${missing.map((f) => f.split("/").pop()).join(", ")}). Real ZK proof generation is unavailable — only demo mode will work.`
+        );
+      }
+    });
+  }, []);
 
   function handleClaimSuccess() {
     setLedgerVersion((version) => version + 1);
@@ -77,6 +89,11 @@ function AppContent() {
 
   return (
     <div className="app-frame">
+      {circuitWarning && runtimeMode !== "demo" && (
+        <div role="alert" className="circuit-warning-banner">
+          {circuitWarning}
+        </div>
+      )}
       <header className="topbar">
         <div className="topbar-inner">
           <div className="brand-lockup">

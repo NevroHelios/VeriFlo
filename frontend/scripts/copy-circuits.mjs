@@ -19,11 +19,18 @@ const artifacts = [
 
 mkdirSync(publicDir, { recursive: true });
 
+let copied = 0;
 for (const artifact of artifacts) {
   if (!existsSync(artifact.from)) {
-    throw new Error(`Missing circuit artifact: ${artifact.from}`);
+    console.warn(`[circuits] Missing artifact (testnet ZK unavailable): ${artifact.from}`);
+    continue;
   }
   copyFileSync(artifact.from, artifact.to);
+  copied++;
 }
 
-console.log(`Prepared ${artifacts.length} circuit artifacts in ${publicDir}`);
+if (copied === artifacts.length) {
+  console.log(`[circuits] Prepared ${copied} circuit artifacts in ${publicDir}`);
+} else {
+  console.warn(`[circuits] ${copied}/${artifacts.length} artifacts copied — demo mode only`);
+}

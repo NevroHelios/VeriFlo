@@ -15,19 +15,29 @@ describe("buildPaymentTx", () => {
 });
 
 describe("parseError", () => {
-  it("maps NullifierReused to PROOF_REJECTED", () => {
-    const err = parseError(new Error("Contract error: NullifierReused"));
+  it("maps NullifierAlreadyUsed (#5) to ALREADY_CLAIMED", () => {
+    const err = parseError(new Error("HostError: Error(Contract, #5)"));
+    expect(err.type).toBe("ALREADY_CLAIMED");
+  });
+
+  it("maps ProofVerificationFailed (#6) to PROOF_REJECTED", () => {
+    const err = parseError(new Error("HostError: Error(Contract, #6)"));
     expect(err.type).toBe("PROOF_REJECTED");
   });
 
-  it("maps ProofInvalid to PROOF_REJECTED", () => {
-    const err = parseError(new Error("ProofInvalid"));
+  it("maps RecipientMismatch (#9) to PROOF_REJECTED", () => {
+    const err = parseError(new Error("HostError: Error(Contract, #9)"));
     expect(err.type).toBe("PROOF_REJECTED");
   });
 
-  it("maps RecipientMismatch to PROOF_REJECTED", () => {
-    const err = parseError(new Error("RecipientMismatch"));
-    expect(err.type).toBe("PROOF_REJECTED");
+  it("maps UntrustedRoot (#7) to UNTRUSTED_ROOT", () => {
+    const err = parseError(new Error("HostError: Error(Contract, #7)"));
+    expect(err.type).toBe("UNTRUSTED_ROOT");
+  });
+
+  it("maps InvalidTimestamp (#10) to EXPIRED_CREDENTIAL", () => {
+    const err = parseError(new Error("HostError: Error(Contract, #10)"));
+    expect(err.type).toBe("EXPIRED_CREDENTIAL");
   });
 
   it("maps missing real ZK proof to ZK_ASSETS_MISSING", () => {

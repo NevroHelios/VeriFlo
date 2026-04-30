@@ -48,7 +48,9 @@ impl VflyToken {
     }
 
     pub fn mint(env: Env, to: Address, amount: i128) -> Result<(), TokenError> {
-        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
         if amount < 0 {
             return Err(TokenError::NegativeAmount);
         }
@@ -69,15 +71,19 @@ impl VflyToken {
     }
 
     pub fn set_authorized(env: Env, id: Address, authorize: bool) -> Result<(), TokenError> {
-        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
         let admin = Self::get_admin(&env)?;
         admin.require_auth();
         env.storage()
             .persistent()
             .set(&DataKey::Authorized(id.clone()), &authorize);
-        env.storage()
-            .persistent()
-            .extend_ttl(&DataKey::Authorized(id), BUMP_THRESHOLD, BUMP_AMOUNT);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Authorized(id),
+            BUMP_THRESHOLD,
+            BUMP_AMOUNT,
+        );
         Ok(())
     }
 
@@ -116,7 +122,9 @@ impl VflyToken {
             return Err(TokenError::NotAuthorized);
         }
 
-        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
 
         let from_key = DataKey::Balance(from);
         let to_key = DataKey::Balance(to);

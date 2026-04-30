@@ -41,7 +41,9 @@ impl CredentialRegistry {
 
     pub fn add_root(env: Env, root: BytesN<32>) -> Result<(), RegistryError> {
         Self::get_admin(&env)?.require_auth();
-        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
 
         let storage = env.storage().persistent();
         let key = DataKey::Root(root.clone());
@@ -64,7 +66,9 @@ impl CredentialRegistry {
 
     pub fn remove_root(env: Env, root: BytesN<32>) -> Result<(), RegistryError> {
         Self::get_admin(&env)?.require_auth();
-        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
 
         let storage = env.storage().persistent();
         let key = DataKey::Root(root.clone());

@@ -104,7 +104,9 @@ impl VerifloVerifier {
 
     pub fn add_trusted_root(env: Env, root: BytesN<32>) -> Result<(), VerifierError> {
         Self::get_admin(&env)?.require_auth();
-        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
         let key = DataKey::TrustedRoot(root);
         // Store unit value — we only ever check existence via `has`.
         env.storage().persistent().set(&key, &());
@@ -116,7 +118,9 @@ impl VerifloVerifier {
 
     pub fn remove_trusted_root(env: Env, root: BytesN<32>) -> Result<(), VerifierError> {
         Self::get_admin(&env)?.require_auth();
-        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
         env.storage()
             .persistent()
             .remove(&DataKey::TrustedRoot(root));
@@ -153,8 +157,8 @@ impl VerifloVerifier {
         // current_time is the last 8 bytes of the 32-byte field element.
         let ct_arr = current_time_bytes.to_array();
         let current_time_input = u64::from_be_bytes([
-            ct_arr[24], ct_arr[25], ct_arr[26], ct_arr[27],
-            ct_arr[28], ct_arr[29], ct_arr[30], ct_arr[31],
+            ct_arr[24], ct_arr[25], ct_arr[26], ct_arr[27], ct_arr[28], ct_arr[29], ct_arr[30],
+            ct_arr[31],
         ]);
         let ledger_time = env.ledger().timestamp();
         if current_time_input.abs_diff(ledger_time) > 300 {
@@ -166,7 +170,9 @@ impl VerifloVerifier {
         }
 
         // ── Phase 2: storage existence checks (`has` avoids deserialization) ───────
-        env.storage().instance().extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_AMOUNT);
 
         let storage = env.storage().persistent();
         let status_key = DataKey::Status(user.clone());

@@ -8,8 +8,9 @@ const TYPE_LABELS: Record<VerifloError["type"], string> = {
   INSUFFICIENT_XLM: "Insufficient XLM",
   PROOF_REJECTED: "Proof Rejected",
   UNTRUSTED_ROOT: "Untrusted Credential",
-  ALREADY_AUTHORIZED: "Already Authorized",
+  ALREADY_CLAIMED: "Already Claimed",
   ZK_ASSETS_MISSING: "ZK Proof Unavailable",
+  EXPIRED_CREDENTIAL: "Credential Expired",
   CONTRACT_ERROR: "Contract Error",
 };
 
@@ -18,8 +19,9 @@ const TYPE_COLORS: Record<VerifloError["type"], string> = {
   INSUFFICIENT_XLM: "warning",
   PROOF_REJECTED: "danger",
   UNTRUSTED_ROOT: "danger",
-  ALREADY_AUTHORIZED: "info",
+  ALREADY_CLAIMED: "info",
   ZK_ASSETS_MISSING: "warning",
+  EXPIRED_CREDENTIAL: "warning",
   CONTRACT_ERROR: "danger",
 };
 

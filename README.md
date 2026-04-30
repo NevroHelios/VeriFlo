@@ -14,9 +14,9 @@ VeriFlo lets an issuer verify investor eligibility **without** collecting or sto
 
 ---
 
-<!-- ## Demo Video
+## Demo Video
 
-> to be added -->
+[Drive](https://drive.google.com/drive/folders/14vVJqIBerdLV-hxolnohudVwi6NrSxBH?usp=sharing)
 
 ---
 
@@ -169,7 +169,7 @@ All four contracts are deployed and initialized on testnet. A Merkle root is pre
 
 ### CI pipeline
 
-> *[Screenshot — to be added after push]*
+![CI passing](assets/ci-passing.png)
 
 ### Test output
 
